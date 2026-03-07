@@ -100,7 +100,7 @@ This repository package is private (`9router-app`), so source/Docker execution i
 ```bash
 cp .env.example .env
 npm install
-PORT=20128 NEXT_PUBLIC_BASE_URL=http://localhost:20128 npm run dev
+PORT=20000 NEXT_PUBLIC_BASE_URL=http://localhost:20000 npm run dev
 ```
 
 Production mode:
@@ -1311,4 +1311,3 @@ MIT License - see [LICENSE](LICENSE) for details.
 <div align="center">
   <sub>Built with ❤️ for developers who code 24/7</sub>
 </div>
-
