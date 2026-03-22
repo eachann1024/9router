@@ -42,13 +42,7 @@ export default function Sidebar({ onClose }) {
       .catch(() => {});
   }, []);
 
-  // Lazy check for new npm version on mount
-  useEffect(() => {
-    fetch("/api/version")
-      .then(res => res.json())
-      .then(data => { if (data.hasUpdate) setUpdateInfo(data); })
-      .catch(() => {});
-  }, []);
+  // Update check disabled (local dev build)
 
   const isActive = (href) => {
     if (href === "/dashboard/endpoint") {
@@ -92,7 +86,7 @@ export default function Sidebar({ onClose }) {
               <span className="text-xs text-text-muted">v{APP_CONFIG.version}</span>
             </div>
           </Link>
-          {updateInfo && (
+          {false && (
             <div className="flex flex-col gap-0.5">
               <span className="text-xs font-semibold text-green-600 dark:text-amber-500">
                 ↑ New version available: v{updateInfo.latestVersion}
