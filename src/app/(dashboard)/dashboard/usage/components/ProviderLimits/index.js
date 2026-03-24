@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import Image from "next/image";
+import ProviderIcon from "@/shared/components/ProviderIcon";
 import QuotaTable from "./QuotaTable";
 import { parseQuotaData } from "./utils";
 import Card from "@/shared/components/Card";
@@ -42,7 +42,7 @@ export default function ProviderLimits() {
     try {
       const response = await fetch("/api/providers/client");
       if (!response.ok) throw new Error("Failed to fetch connections");
-      
+
       const data = await response.json();
       const connectionList = data.connections || [];
       setConnections(connectionList);
@@ -60,23 +60,30 @@ export default function ProviderLimits() {
     setErrors((prev) => ({ ...prev, [connectionId]: null }));
 
     try {
-      console.log(`[ProviderLimits] Fetching quota for ${provider} (${connectionId})`);
+      console.log(
+        `[ProviderLimits] Fetching quota for ${provider} (${connectionId})`,
+      );
       const response = await fetch(`/api/usage/${connectionId}`);
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMsg = errorData.error || response.statusText;
-        
+
         // Handle different error types gracefully
         if (response.status === 404) {
           // Connection not found - skip silently
-          console.warn(`[ProviderLimits] Connection not found for ${provider}, skipping`);
+          console.warn(
+            `[ProviderLimits] Connection not found for ${provider}, skipping`,
+          );
           return;
         }
-        
+
         if (response.status === 401) {
           // Auth error - show message instead of throwing
-          console.warn(`[ProviderLimits] Auth error for ${provider}:`, errorMsg);
+          console.warn(
+            `[ProviderLimits] Auth error for ${provider}:`,
+            errorMsg,
+          );
           setQuotaData((prev) => ({
             ...prev,
             [connectionId]: {
@@ -86,16 +93,16 @@ export default function ProviderLimits() {
           }));
           return;
         }
-        
+
         throw new Error(`HTTP ${response.status}: ${errorMsg}`);
       }
 
       const data = await response.json();
       console.log(`[ProviderLimits] Got quota for ${provider}:`, data);
-      
+
       // Parse quota data using provider-specific parser
       const parsedQuotas = parseQuotaData(provider, data);
-      
+
       setQuotaData((prev) => ({
         ...prev,
         [connectionId]: {
@@ -106,7 +113,10 @@ export default function ProviderLimits() {
         },
       }));
     } catch (error) {
-      console.error(`[ProviderLimits] Error fetching quota for ${provider} (${connectionId}):`, error);
+      console.error(
+        `[ProviderLimits] Error fetching quota for ${provider} (${connectionId}):`,
+        error,
+      );
       setErrors((prev) => ({
         ...prev,
         [connectionId]: error.message || "Failed to fetch quota",
@@ -169,7 +179,7 @@ export default function ProviderLimits() {
       await fetchQuota(connectionId, provider);
       setLastUpdated(new Date());
     },
-    [fetchQuota]
+    [fetchQuota],
   );
 
   // Refresh all providers
@@ -183,10 +193,9 @@ export default function ProviderLimits() {
       const conns = await fetchConnections();
       await fetchQuotaAutoTriggerSettings();
       const oauthConnections = getSupportedConnections(conns);
-      
       // Fetch quota for supported OAuth connections only
       await Promise.all(
-        oauthConnections.map((conn) => fetchQuota(conn.id, conn.provider))
+        oauthConnections.map((conn) => fetchQuota(conn.id, conn.provider)),
       );
 
       setLastUpdated(new Date());
@@ -237,11 +246,13 @@ export default function ProviderLimits() {
 
       // Mark all as loading before fetching
       const loadingState = {};
-      oauthConnections.forEach((conn) => { loadingState[conn.id] = true; });
+      oauthConnections.forEach((conn) => {
+        loadingState[conn.id] = true;
+      });
       setLoading(loadingState);
 
       await Promise.all(
-        oauthConnections.map((conn) => fetchQuota(conn.id, conn.provider))
+        oauthConnections.map((conn) => fetchQuota(conn.id, conn.provider)),
       );
       setLastUpdated(new Date());
     };
@@ -339,22 +350,11 @@ export default function ProviderLimits() {
   // Filter only supported providers
   const filteredConnections = getSupportedConnections(connections);
 
-  // Sort providers: antigravity first, then kiro, then others alphabetically
+  // Sort providers by USAGE_SUPPORTED_PROVIDERS order, then alphabetically
   const sortedConnections = [...filteredConnections].sort((a, b) => {
-    const getProviderPriority = (provider) => {
-      if (provider === "antigravity") return 1;
-      if (provider === "kiro") return 2;
-      return 3;
-    };
-
-    const priorityA = getProviderPriority(a.provider);
-    const priorityB = getProviderPriority(b.provider);
-
-    if (priorityA !== priorityB) {
-      return priorityA - priorityB;
-    }
-
-    // Same priority: sort alphabetically
+    const orderA = USAGE_SUPPORTED_PROVIDERS.indexOf(a.provider);
+    const orderB = USAGE_SUPPORTED_PROVIDERS.indexOf(b.provider);
+    if (orderA !== orderB) return orderA - orderB;
     return a.provider.localeCompare(b.provider);
   });
 
@@ -372,7 +372,8 @@ export default function ProviderLimits() {
             No Providers Connected
           </h3>
           <p className="mt-2 text-sm text-text-muted max-w-md mx-auto">
-            Connect to providers with OAuth to track your API quota limits and usage.
+            Connect to providers with OAuth to track your API quota limits and
+            usage.
           </p>
         </div>
       </Card>
@@ -417,7 +418,10 @@ export default function ProviderLimits() {
               )}
             </button>
             <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg bg-black px-3 py-2 text-xs leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-neutral-900 md:left-0 md:right-auto md:w-80">
-              {translate("When enabled, it runs once immediately, then refreshes automatically once every hour. Opening or switching to this page will not trigger an extra run.")}
+              <p>{translate("When enabled, it runs once immediately, then refreshes automatically once every hour. Opening or switching to this page will not trigger an extra run.")}</p>
+              <p className="mt-2 text-white/80">
+                {translate("These internal refresh requests consume provider quota and are hidden from usage history/logs for now.")}
+              </p>
             </div>
           </div>
 
@@ -476,13 +480,14 @@ export default function ProviderLimits() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
-                      <Image
+                      <ProviderIcon
                         src={`/providers/${conn.provider}.png`}
                         alt={conn.provider}
-                        width={40}
-                        height={40}
+                        size={40}
                         className="object-contain"
-                        sizes="40px"
+                        fallbackText={
+                          conn.provider?.slice(0, 2).toUpperCase() || "PR"
+                        }
                       />
                     </div>
                     <div>
@@ -506,7 +511,7 @@ export default function ProviderLimits() {
                       )}
                     </div>
                   </div>
-                  
+
                   <button
                     onClick={() => refreshProvider(conn.id, conn.provider)}
                     disabled={isBusy}
