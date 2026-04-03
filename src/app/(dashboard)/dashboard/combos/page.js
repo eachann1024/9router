@@ -202,18 +202,7 @@ function ComboCard({ combo, copied, onCopy, onEdit, onDelete, roundRobinEnabled,
             <span className="material-symbols-outlined text-primary text-[18px]">layers</span>
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <code className="text-sm font-medium font-mono truncate">{combo.name}</code>
-              <button
-                onClick={(e) => { e.stopPropagation(); onCopy(combo.name, `combo-${combo.id}`); }}
-                className="p-0.5 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-colors opacity-0 group-hover:opacity-100"
-                title={translate("Copy combo name")}
-              >
-                <span className="material-symbols-outlined text-[14px]">
-                  {copied === `combo-${combo.id}` ? "check" : "content_copy"}
-                </span>
-              </button>
-            </div>
+            <code className="text-sm font-medium font-mono truncate">{combo.name}</code>
             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
               {combo.models.length === 0 ? (
                 <span className="text-xs text-text-muted italic">{translate("No models")}</span>
@@ -232,9 +221,8 @@ function ComboCard({ combo, copied, onCopy, onEdit, onDelete, roundRobinEnabled,
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Round Robin Toggle */}
-          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1.5">
             <span className="text-xs text-text-muted font-medium">{translate("Round Robin")}</span>
             <Toggle
               size="sm"
@@ -243,20 +231,32 @@ function ComboCard({ combo, copied, onCopy, onEdit, onDelete, roundRobinEnabled,
             />
           </div>
 
-          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); onCopy(combo.name, `combo-${combo.id}`); }}
+              className="flex flex-col items-center px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/5 text-text-muted hover:text-primary transition-colors"
+              title={translate("Copy combo name")}
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                {copied === `combo-${combo.id}` ? "check" : "content_copy"}
+              </span>
+              <span className="text-[10px] leading-tight">{translate("Copy")}</span>
+            </button>
             <button
               onClick={onEdit}
-              className="p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded text-text-muted hover:text-primary transition-colors"
+              className="flex flex-col items-center px-2 py-1 rounded hover:bg-black/5 dark:hover:bg-white/5 text-text-muted hover:text-primary transition-colors"
               title={translate("Edit")}
             >
-              <span className="material-symbols-outlined text-[16px]">edit</span>
+              <span className="material-symbols-outlined text-[18px]">edit</span>
+              <span className="text-[10px] leading-tight">{translate("Edit")}</span>
             </button>
             <button
               onClick={onDelete}
-              className="p-1.5 hover:bg-red-500/10 rounded text-red-500 transition-colors"
+              className="flex flex-col items-center px-2 py-1 rounded hover:bg-red-500/10 text-red-500 transition-colors"
               title={translate("Delete")}
             >
-              <span className="material-symbols-outlined text-[16px]">delete</span>
+              <span className="material-symbols-outlined text-[18px]">delete</span>
+              <span className="text-[10px] leading-tight">{translate("Delete")}</span>
             </button>
           </div>
         </div>
