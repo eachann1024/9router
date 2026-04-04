@@ -125,4 +125,8 @@ export const USAGE_SUPPORTED_PROVIDERS = [
   "github",
   "codex",
   "kimi-coding",
+  "glm-cn",
 ];
+
+// API key providers that support quota tracking (not OAuth)
+export const APIKEY_USAGE_PROVIDERS = ["glm-cn"];

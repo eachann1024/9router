@@ -198,9 +198,6 @@ async function flushToDatabase() {
 }
 
 export async function saveRequestDetail(detail) {
-  if (detail?.hidden === true) {
-    return;
-  }
   if (isCloud) return;
 
   const config = await getObservabilityConfig();

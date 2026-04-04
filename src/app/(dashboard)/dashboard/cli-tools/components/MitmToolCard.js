@@ -272,6 +272,12 @@ export default function MitmToolCard({
                 <span>{modalError}</span>
               </div>
             )}
+            {loading && (
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-primary/10 text-primary">
+                <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                <span>{pendingDnsAction === "enable" ? "Enabling DNS, please wait…" : "Disabling DNS…"}</span>
+              </div>
+            )}
             <div className="flex items-center justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => { setShowPasswordModal(false); setSudoPassword(""); setModalError(null); }} disabled={loading}>
                 Cancel

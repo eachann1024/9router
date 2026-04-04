@@ -9,9 +9,26 @@ export async function GET() {
   try {
     const service = getQuotaAutoTriggerService();
     const snapshot = await getQuotaAutoTriggerSnapshot();
+    const isRunning = service.isRunning();
+
+    // Sanitize stale warmup states when service is not running
+    if (!isRunning) {
+      for (const conn of snapshot.connections) {
+        if (conn.warmupState?.running) {
+          conn.warmupState = {
+            ...conn.warmupState,
+            running: false,
+            phase: "idle",
+            currentModelId: null,
+            currentModelName: null,
+          };
+        }
+      }
+    }
+
     return NextResponse.json({
       ...snapshot,
-      running: service.isRunning(),
+      running: isRunning,
     });
   } catch (error) {
     console.error("[QuotaAutoTrigger] GET failed:", error);

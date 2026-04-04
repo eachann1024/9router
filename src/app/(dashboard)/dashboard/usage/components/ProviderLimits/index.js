@@ -6,7 +6,7 @@ import QuotaTable from "./QuotaTable";
 import { parseQuotaData } from "./utils";
 import Card from "@/shared/components/Card";
 import Button from "@/shared/components/Button";
-import { USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
+import { USAGE_SUPPORTED_PROVIDERS, APIKEY_USAGE_PROVIDERS } from "@/shared/constants/providers";
 import { translate } from "@/i18n/runtime";
 
 const REFRESH_INTERVAL_MS = 60000; // 60 seconds
@@ -32,7 +32,9 @@ export default function ProviderLimits() {
 
   const getSupportedConnections = useCallback(
     (connectionList) => connectionList.filter(
-      (conn) => USAGE_SUPPORTED_PROVIDERS.includes(conn.provider) && conn.authType === "oauth"
+      (conn) => USAGE_SUPPORTED_PROVIDERS.includes(conn.provider) && (
+        conn.authType === "oauth" || APIKEY_USAGE_PROVIDERS.includes(conn.provider)
+      )
     ),
     []
   );
@@ -420,7 +422,7 @@ export default function ProviderLimits() {
             <div className="pointer-events-none absolute right-0 top-full z-20 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg bg-black px-3 py-2 text-xs leading-5 text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 dark:bg-neutral-900 md:left-0 md:right-auto md:w-80">
               <p>{translate("When enabled, it runs once immediately, then refreshes automatically once every hour. Opening or switching to this page will not trigger an extra run.")}</p>
               <p className="mt-2 text-white/80">
-                {translate("These internal refresh requests consume provider quota and are hidden from usage history/logs for now.")}
+                {translate("These internal refresh requests consume provider quota and will appear in usage history/logs.")}
               </p>
             </div>
           </div>
@@ -547,6 +549,7 @@ export default function ProviderLimits() {
                   <QuotaTable
                     quotas={quota?.quotas}
                     warmupState={warmupState}
+                    showWarmupState={quotaAutoTriggerEnabled}
                   />
                 )}
               </div>

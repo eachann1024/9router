@@ -55,8 +55,9 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   const doAction = async (action, password) => {
     setLoading(true);
     try {
+      let res;
       if (action === "trust-cert") {
-        await fetch("/api/cli-tools/antigravity-mitm", {
+        res = await fetch("/api/cli-tools/antigravity-mitm", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "trust-cert", sudoPassword: password }),
@@ -65,22 +66,32 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
         const keyToUse = selectedApiKey?.trim()
           || (apiKeys?.length > 0 ? apiKeys[0].key : null)
           || (!cloudEnabled ? "sk_9router" : null);
-        await fetch("/api/cli-tools/antigravity-mitm", {
+        res = await fetch("/api/cli-tools/antigravity-mitm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ apiKey: keyToUse, sudoPassword: password }),
         });
       } else {
-        await fetch("/api/cli-tools/antigravity-mitm", {
+        res = await fetch("/api/cli-tools/antigravity-mitm", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sudoPassword: password }),
         });
       }
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setModalError(data.error || `Failed (HTTP ${res.status})`);
+        return;
+      }
+
       setShowPasswordModal(false);
       setSudoPassword("");
+      setModalError(null);
       await fetchStatus();
-    } catch { /* ignore */ } finally {
+    } catch (err) {
+      setModalError(err.message || "Network error");
+    } finally {
       setLoading(false);
       setPendingAction(null);
     }
@@ -223,6 +234,12 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
               <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-red-500/10 text-red-600">
                 <span className="material-symbols-outlined text-[14px]">error</span>
                 <span>{modalError}</span>
+              </div>
+            )}
+            {loading && (
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-primary/10 text-primary">
+                <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                <span>{pendingAction === "start" ? "Starting server, please wait…" : pendingAction === "trust-cert" ? "Trusting certificate…" : "Stopping server…"}</span>
               </div>
             )}
             <div className="flex items-center justify-end gap-2">

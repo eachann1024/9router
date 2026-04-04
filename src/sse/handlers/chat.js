@@ -18,20 +18,10 @@ import { detectFormatByEndpoint } from "open-sse/translator/formats.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
-import {
-  QUOTA_AUTO_TRIGGER_HEADER,
-  QUOTA_AUTO_TRIGGER_TASK,
-  QUOTA_TARGET_CONNECTION_HEADER,
-} from "@/shared/services/quotaAutoTriggerService";
+import { QUOTA_TARGET_CONNECTION_HEADER } from "@/shared/services/quotaAutoTriggerService";
 
-function getRequestTrackingOptions(request) {
-  const internalTask = request?.headers?.get(QUOTA_AUTO_TRIGGER_HEADER) || null;
-
-  return {
-    internalTask,
-    preferredConnectionId: request?.headers?.get(QUOTA_TARGET_CONNECTION_HEADER) || null,
-    skipUsageTracking: internalTask === QUOTA_AUTO_TRIGGER_TASK,
-  };
+function getPreferredConnectionId(request) {
+  return request?.headers?.get(QUOTA_TARGET_CONNECTION_HEADER) || null;
 }
 
 /**
@@ -40,7 +30,7 @@ function getRequestTrackingOptions(request) {
  * Format detection and translation handled by translator
  */
 export async function handleChat(request, clientRawRequest = null) {
-  const trackingOptions = getRequestTrackingOptions(request);
+  const preferredConnectionId = getPreferredConnectionId(request);
   let body;
   try {
     body = await request.json();
@@ -111,7 +101,7 @@ export async function handleChat(request, clientRawRequest = null) {
     return handleComboChat({
       body,
       models: comboModels,
-      handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, trackingOptions),
+      handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, preferredConnectionId),
       log,
       comboName: modelStr,
       comboStrategy
@@ -119,13 +109,13 @@ export async function handleChat(request, clientRawRequest = null) {
   }
 
   // Single model request
-  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, trackingOptions);
+  return handleSingleModelChat(body, modelStr, clientRawRequest, request, apiKey, preferredConnectionId);
 }
 
 /**
  * Handle single model chat request
  */
-async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, trackingOptions = null) {
+async function handleSingleModelChat(body, modelStr, clientRawRequest = null, request = null, apiKey = null, preferredConnectionId = null) {
   const modelInfo = await getModelInfo(modelStr);
 
   // If provider is null, this might be a combo name - check and handle
@@ -142,7 +132,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       return handleComboChat({
         body,
         models: comboModels,
-        handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, trackingOptions),
+        handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, preferredConnectionId),
         log,
         comboName: modelStr,
         comboStrategy
@@ -174,7 +164,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       provider,
       excludeConnectionIds,
       model,
-      trackingOptions?.preferredConnectionId || null
+      preferredConnectionId
     );
 
     // All accounts unavailable
@@ -232,8 +222,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       },
       onRequestSuccess: async () => {
         await clearAccountError(credentials.connectionId, credentials, model);
-      },
-      trackingOptions,
+      }
     });
 
     if (result.success) return result.response;

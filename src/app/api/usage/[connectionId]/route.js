@@ -4,6 +4,7 @@ import "open-sse/index.js";
 import { getProviderConnectionById, updateProviderConnection } from "@/lib/localDb";
 import { getUsageForProvider } from "open-sse/services/usage.js";
 import { getExecutor } from "open-sse/executors/index.js";
+import { APIKEY_USAGE_PROVIDERS } from "@/shared/constants/providers";
 
 // Detect auth-expired messages returned by usage providers instead of throwing
 const AUTH_EXPIRED_PATTERNS = ["expired", "authentication", "unauthorized", "401", "re-authorize"];
@@ -112,35 +113,42 @@ export async function GET(request, { params }) {
       return Response.json({ error: "Connection not found" }, { status: 404 });
     }
 
-    // Only OAuth connections have usage APIs
-    if (connection.authType !== "oauth") {
+    // Only OAuth connections (and select API key providers) have usage APIs
+    if (connection.authType !== "oauth" && !APIKEY_USAGE_PROVIDERS.includes(connection.provider)) {
       return Response.json({ message: "Usage not available for API key connections" });
     }
 
-    // Refresh credentials if needed using executor
-    try {
-      const result = await refreshAndUpdateCredentials(connection);
-      connection = result.connection;
-    } catch (refreshError) {
-      console.error("[Usage API] Credential refresh failed:", refreshError);
-      return Response.json({
-        error: `Credential refresh failed: ${refreshError.message}`
-      }, { status: 401 });
-    }
+    let usage;
 
-    // Fetch usage from provider API
-    let usage = await getUsageForProvider(connection);
-
-    // If provider returned an auth-expired message instead of throwing,
-    // force-refresh token and retry once
-    if (isAuthExpiredMessage(usage) && connection.refreshToken) {
+    if (connection.authType === "oauth") {
+      // Refresh credentials if needed using executor
       try {
-        const retryResult = await refreshAndUpdateCredentials(connection, true);
-        connection = retryResult.connection;
-        usage = await getUsageForProvider(connection);
-      } catch (retryError) {
-        console.warn(`[Usage] ${connection.provider}: force refresh failed: ${retryError.message}`);
+        const result = await refreshAndUpdateCredentials(connection);
+        connection = result.connection;
+      } catch (refreshError) {
+        console.error("[Usage API] Credential refresh failed:", refreshError);
+        return Response.json({
+          error: `Credential refresh failed: ${refreshError.message}`
+        }, { status: 401 });
       }
+
+      // Fetch usage from provider API
+      usage = await getUsageForProvider(connection);
+
+      // If provider returned an auth-expired message instead of throwing,
+      // force-refresh token and retry once
+      if (isAuthExpiredMessage(usage) && connection.refreshToken) {
+        try {
+          const retryResult = await refreshAndUpdateCredentials(connection, true);
+          connection = retryResult.connection;
+          usage = await getUsageForProvider(connection);
+        } catch (retryError) {
+          console.warn(`[Usage] ${connection.provider}: force refresh failed: ${retryError.message}`);
+        }
+      }
+    } else {
+      // API key provider quota fetch
+      usage = await getApiKeyProviderUsage(connection);
     }
 
     return Response.json(usage);
@@ -148,5 +156,19 @@ export async function GET(request, { params }) {
     const provider = connection?.provider ?? "unknown";
     console.warn(`[Usage] ${provider}: ${error.message}`);
     return Response.json({ error: error.message }, { status: 500 });
+  }
+}
+
+/**
+ * Fetch usage for API key providers with quota support
+ */
+async function getApiKeyProviderUsage(connection) {
+  switch (connection.provider) {
+    case "glm-cn": {
+      const { getGlmCnUsage } = await import("@/lib/usage/glmCnUsage");
+      return await getGlmCnUsage(connection);
+    }
+    default:
+      return { message: `Usage API not implemented for ${connection.provider}` };
   }
 }

@@ -6,7 +6,7 @@ import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import { isOpenAICompatibleProvider, isAnthropicCompatibleProvider } from "@/shared/constants/providers";
 import { translate } from "@/i18n/runtime";
 
-// Validate combo name: only a-z, A-Z, 0-9, -, _, .
+// Validate combo name: only a-z, A-Z, 0-9, -, _
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_.\-]+$/;
 
 export default function CombosPage() {
@@ -57,7 +57,7 @@ export default function CombosPage() {
         setShowCreateModal(false);
       } else {
         const err = await res.json();
-        alert(err.error || translate("Failed to create combo"));
+        alert(err.error || "Failed to create combo");
       }
     } catch (error) {
       console.log("Error creating combo:", error);
@@ -76,7 +76,7 @@ export default function CombosPage() {
         setEditingCombo(null);
       } else {
         const err = await res.json();
-        alert(err.error || translate("Failed to update combo"));
+        alert(err.error || "Failed to update combo");
       }
     } catch (error) {
       console.log("Error updating combo:", error);
@@ -84,7 +84,7 @@ export default function CombosPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm(translate("Delete this combo?"))) return;
+    if (!confirm("Delete this combo?")) return;
     try {
       const res = await fetch(`/api/combos/${id}`, { method: "DELETE" });
       if (res.ok) {
@@ -103,13 +103,13 @@ export default function CombosPage() {
       } else {
         delete updated[comboName];
       }
-
+      
       await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comboStrategies: updated }),
       });
-
+      
       setComboStrategies(updated);
     } catch (error) {
       console.log("Error updating combo strategy:", error);
@@ -130,13 +130,13 @@ export default function CombosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">{translate("Combos")}</h1>
+          <h1 className="text-2xl font-semibold">Combos</h1>
           <p className="text-sm text-text-muted mt-1">
-            {translate("Create model combos with fallback support")}
+            Create model combos with fallback support
           </p>
         </div>
         <Button icon="add" onClick={() => setShowCreateModal(true)}>
-          {translate("Create Combo")}
+          Create Combo
         </Button>
       </div>
 
@@ -147,10 +147,10 @@ export default function CombosPage() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-4">
               <span className="material-symbols-outlined text-[32px]">layers</span>
             </div>
-            <p className="text-text-main font-medium mb-1">{translate("No combos yet")}</p>
-            <p className="text-sm text-text-muted mb-4">{translate("Create model combos with fallback support")}</p>
+            <p className="text-text-main font-medium mb-1">No combos yet</p>
+            <p className="text-sm text-text-muted mb-4">Create model combos with fallback support</p>
             <Button icon="add" onClick={() => setShowCreateModal(true)}>
-              {translate("Create Combo")}
+              Create Combo
             </Button>
           </div>
         </Card>
@@ -270,6 +270,12 @@ function ModelItem({ index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(model);
 
+  // Sync draft when model prop changes (e.g. after reorder)
+  useEffect(() => {
+    setDraft(model);
+    setEditing(false);
+  }, [model]);
+
   const commit = () => {
     const trimmed = draft.trim();
     if (trimmed && trimmed !== model) onEdit(trimmed);
@@ -301,7 +307,7 @@ function ModelItem({ index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown
         <div
           className="flex-1 min-w-0 px-1.5 py-0.5 text-xs font-mono text-text-main truncate cursor-text hover:bg-black/5 dark:hover:bg-white/5 rounded"
           onClick={() => setEditing(true)}
-          title={translate("Click to edit")}
+          title="Click to edit"
         >
           {model}
         </div>
@@ -313,7 +319,7 @@ function ModelItem({ index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown
           onClick={onMoveUp}
           disabled={isFirst}
           className={`p-0.5 rounded ${isFirst ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`}
-          title={translate("Move up")}
+          title="Move up"
         >
           <span className="material-symbols-outlined text-[12px]">arrow_upward</span>
         </button>
@@ -321,7 +327,7 @@ function ModelItem({ index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown
           onClick={onMoveDown}
           disabled={isLast}
           className={`p-0.5 rounded ${isLast ? "text-text-muted/20 cursor-not-allowed" : "text-text-muted hover:text-primary hover:bg-black/5 dark:hover:bg-white/5"}`}
-          title={translate("Move down")}
+          title="Move down"
         >
           <span className="material-symbols-outlined text-[12px]">arrow_downward</span>
         </button>
@@ -331,7 +337,7 @@ function ModelItem({ index, model, isFirst, isLast, onEdit, onMoveUp, onMoveDown
       <button
         onClick={onRemove}
         className="p-0.5 hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 transition-all"
-        title={translate("Remove")}
+        title="Remove"
       >
         <span className="material-symbols-outlined text-[12px]">close</span>
       </button>
@@ -365,11 +371,11 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders }) {
 
   const validateName = (value) => {
     if (!value.trim()) {
-      setNameError(translate("Name is required"));
+      setNameError("Name is required");
       return false;
     }
     if (!VALID_NAME_REGEX.test(value)) {
-      setNameError(translate("Only letters, numbers, -, _ and . allowed"));
+      setNameError("Only letters, numbers, -, _ and . allowed");
       return false;
     }
     setNameError("");
@@ -421,37 +427,37 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders }) {
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title={isEdit ? translate("Edit Combo") : translate("Create Combo")}
+        title={isEdit ? "Edit Combo" : "Create Combo"}
       >
         <div className="flex flex-col gap-3">
           {/* Name */}
           <div>
             <Input
-              label={translate("Combo Name")}
+              label="Combo Name"
               value={name}
               onChange={handleNameChange}
               placeholder="my-combo"
               error={nameError}
             />
             <p className="text-[10px] text-text-muted mt-0.5">
-              {translate("Only letters, numbers, -, _ and . allowed")}
+              Only letters, numbers, -, _ and . allowed
             </p>
           </div>
 
           {/* Models */}
           <div>
-            <label className="text-sm font-medium mb-1.5 block">{translate("Models")}</label>
+            <label className="text-sm font-medium mb-1.5 block">Models</label>
 
             {models.length === 0 ? (
               <div className="text-center py-4 border border-dashed border-black/10 dark:border-white/10 rounded-lg bg-black/[0.01] dark:bg-white/[0.01]">
                 <span className="material-symbols-outlined text-text-muted text-xl mb-1">layers</span>
-                <p className="text-xs text-text-muted">{translate("No models added yet")}</p>
+                <p className="text-xs text-text-muted">No models added yet</p>
               </div>
             ) : (
               <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
                 {models.map((model, index) => (
                   <ModelItem
-                    key={index}
+                    key={model}
                     index={index}
                     model={model}
                     isFirst={index === 0}
@@ -475,14 +481,14 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders }) {
               className="w-full mt-2 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-text-muted hover:text-primary hover:border-primary/30 transition-colors flex items-center justify-center gap-1"
             >
               <span className="material-symbols-outlined text-[16px]">add</span>
-              {translate("Add Model")}
+              Add Model
             </button>
           </div>
 
           {/* Actions */}
           <div className="flex gap-2 pt-1">
             <Button onClick={onClose} variant="ghost" fullWidth size="sm">
-              {translate("Cancel")}
+              Cancel
             </Button>
             <Button
               onClick={handleSave}
@@ -490,7 +496,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders }) {
               size="sm"
               disabled={!name.trim() || !!nameError || saving}
             >
-              {saving ? translate("Saving...") : isEdit ? translate("Save") : translate("Create")}
+              {saving ? "Saving..." : isEdit ? "Save" : "Create"}
             </Button>
           </div>
         </div>
@@ -503,7 +509,7 @@ function ComboFormModal({ isOpen, combo, onClose, onSave, activeProviders }) {
         onSelect={handleAddModel}
         activeProviders={activeProviders}
         modelAliases={modelAliases}
-        title={translate("Add Model to Combo")}
+        title="Add Model to Combo"
       />
     </>
   );

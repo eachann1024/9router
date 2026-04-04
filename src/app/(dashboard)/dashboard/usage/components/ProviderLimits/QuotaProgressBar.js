@@ -2,7 +2,6 @@
 
 import { cn } from "@/shared/utils/cn";
 import { formatResetTime } from "./utils";
-import { translate } from "@/i18n/runtime";
 
 // Calculate color based on remaining percentage
 const getColorClasses = (remainingPercentage) => {
@@ -36,22 +35,22 @@ const getColorClasses = (remainingPercentage) => {
 // Format reset time display
 const formatResetTimeDisplay = (resetTime) => {
   if (!resetTime) return null;
-
+  
   try {
     const resetDate = new Date(resetTime);
     const now = new Date();
     const isToday = resetDate.toDateString() === now.toDateString();
     const isTomorrow = resetDate.toDateString() === new Date(now.getTime() + 86400000).toDateString();
-
+    
     const timeStr = resetDate.toLocaleTimeString(undefined, {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
     });
-
-    if (isToday) return `${translate("Today")}, ${timeStr}`;
-    if (isTomorrow) return `${translate("Tomorrow")}, ${timeStr}`;
-
+    
+    if (isToday) return `Today, ${timeStr}`;
+    if (isTomorrow) return `Tomorrow, ${timeStr}`;
+    
     return resetDate.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
@@ -107,12 +106,12 @@ export default function QuotaProgressBar({
       {/* Usage details and countdown */}
       <div className="flex items-center justify-between text-xs text-text-muted">
         <span>
-          {used.toLocaleString()} / {total.toLocaleString()} {translate("requests")}
+          {used.toLocaleString()} / {total.toLocaleString()} requests
         </span>
         {countdown !== "-" && (
           <div className="flex items-center gap-1">
             <span>•</span>
-            <span className="font-medium">{translate("Reset in")} {countdown}</span>
+            <span className="font-medium">Reset in {countdown}</span>
           </div>
         )}
       </div>
@@ -120,7 +119,7 @@ export default function QuotaProgressBar({
       {/* Reset time display */}
       {resetDisplay && (
         <div className="text-xs text-text-muted/70">
-          {translate("Reset at")} {resetDisplay}
+          Reset at {resetDisplay}
         </div>
       )}
     </div>

@@ -201,8 +201,16 @@ export default function ProviderDetailPage() {
     fetchAliases();
   }, [fetchConnections, fetchAliases]);
 
-  // Fetch suggested models from provider's public API (if configured)
+  // Fetch suggested models: use server-side route for OpenRouter (authenticated, no cache),
+  // fall back to client-side fetcher for other providers.
   useEffect(() => {
+    if (providerId === "openrouter") {
+      fetch("/api/providers/openrouter/free-models")
+        .then((res) => res.json())
+        .then((data) => { if (data.models?.length) setSuggestedModels(data.models); })
+        .catch(() => {});
+      return;
+    }
     const fetcher = (OAUTH_PROVIDERS[providerId] || APIKEY_PROVIDERS[providerId] || FREE_PROVIDERS[providerId] || FREE_TIER_PROVIDERS[providerId])?.modelsFetcher;
     if (!fetcher) return;
     fetchSuggestedModels(fetcher).then(setSuggestedModels);
