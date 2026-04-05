@@ -384,6 +384,7 @@
   "Installing...": "安装中...",
   "Interactive diagram visible on desktop": "桌面上可见的交互式图表",
   "Intercept CLI tool traffic and route through 9Router": "拦截命令行工具流量并通过 9Router 路由",
+  "Intercepts Claude Code's topic-naming requests and returns a fake response locally, saving API tokens.": "拦截 Claude Code 的话题命名请求，在本地返回虚假响应，节省 API Token。",
   "Intercepts Antigravity traffic via DNS redirect, letting you reroute models through 9Router.": "通过 DNS 重定向拦截Antigravity流量，让您可以通过 9Router 重新路由模型。",
   "Invalid": "无效",
   "Invalid backup file": "无效的备份文件",

@@ -25,6 +25,7 @@ async function loadTranslations(locale) {
   
   try {
     const response = await fetch(`/i18n/literals/${locale}.json`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     translationMap = await response.json();
   } catch (err) {
     console.error("Failed to load translations:", err);

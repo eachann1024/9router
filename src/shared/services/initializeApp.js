@@ -16,7 +16,7 @@ import os from "os";
   if (!process.env.MITM_SERVER_PATH) {
     try {
       const thisFile = fileURLToPath(import.meta.url);
-      const appSrc = dirname(dirname(thisFile)); // src/
+      const appSrc = dirname(dirname(dirname(thisFile))); // src/
       const candidate = join(appSrc, "mitm", "server.js");
       if (existsSync(candidate)) {
         process.env.MITM_SERVER_PATH = candidate;
