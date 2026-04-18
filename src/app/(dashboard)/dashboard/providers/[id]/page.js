@@ -342,6 +342,38 @@ export default function ProviderDetailPage() {
     }
   };
 
+  const handleMoveToTop = async (index) => {
+    if (index <= 0) return;
+    const conn = connections[index];
+    const topPriority = connections[0].priority ?? 0;
+    try {
+      await fetch(`/api/providers/${conn.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: topPriority - 1 }),
+      });
+      await fetchConnections();
+    } catch (error) {
+      console.log("Error moving to top:", error);
+    }
+  };
+
+  const handleMoveToBottom = async (index) => {
+    if (index >= connections.length - 1) return;
+    const conn = connections[index];
+    const bottomPriority = connections[connections.length - 1].priority ?? connections.length - 1;
+    try {
+      await fetch(`/api/providers/${conn.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: bottomPriority + 1 }),
+      });
+      await fetchConnections();
+    } catch (error) {
+      console.log("Error moving to bottom:", error);
+    }
+  };
+
   const selectedConnections = connections.filter((conn) => selectedConnectionIds.includes(conn.id));
   const allSelected = connections.length > 0 && selectedConnectionIds.length === connections.length;
 
@@ -447,6 +479,8 @@ export default function ProviderDetailPage() {
                 isLast={index === connections.length - 1}
                 onMoveUp={() => handleSwapPriority(index, index - 1)}
                 onMoveDown={() => handleSwapPriority(index, index + 1)}
+                onMoveToTop={() => handleMoveToTop(index)}
+                onMoveToBottom={() => handleMoveToBottom(index)}
                 onToggleActive={(isActive) => handleUpdateConnectionStatus(conn.id, isActive)}
                 onUpdateProxy={async (proxyPoolId) => {
                   try {
@@ -1467,7 +1501,7 @@ CooldownTimer.propTypes = {
   until: PropTypes.string.isRequired,
 };
 
-function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onToggleActive, onUpdateProxy, onEdit, onDelete }) {
+function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMoveUp, onMoveDown, onMoveToTop, onMoveToBottom, onToggleActive, onUpdateProxy, onEdit, onDelete }) {
   const [showProxyDropdown, setShowProxyDropdown] = useState(false);
   const [updatingProxy, setUpdatingProxy] = useState(false);
   const proxyDropdownRef = useRef(null);
@@ -1577,15 +1611,25 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
         <div className="flex flex-col">
           <button
             onClick={onMoveUp}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onMoveToTop();
+            }}
             disabled={isFirst}
             className={`p-0.5 rounded ${isFirst ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
+            title="Left click to move up, right click to move to top"
           >
             <span className="material-symbols-outlined text-sm">keyboard_arrow_up</span>
           </button>
           <button
             onClick={onMoveDown}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              onMoveToBottom();
+            }}
             disabled={isLast}
             className={`p-0.5 rounded ${isLast ? "text-text-muted/30 cursor-not-allowed" : "hover:bg-sidebar text-text-muted hover:text-primary"}`}
+            title="Left click to move down, right click to move to bottom"
           >
             <span className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
           </button>
@@ -1715,6 +1759,8 @@ ConnectionRow.propTypes = {
   isLast: PropTypes.bool.isRequired,
   onMoveUp: PropTypes.func.isRequired,
   onMoveDown: PropTypes.func.isRequired,
+  onMoveToTop: PropTypes.func.isRequired,
+  onMoveToBottom: PropTypes.func.isRequired,
   onToggleActive: PropTypes.func.isRequired,
   onUpdateProxy: PropTypes.func,
   onEdit: PropTypes.func.isRequired,
