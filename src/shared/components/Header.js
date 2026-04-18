@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import PropTypes from "prop-types";
 import ProviderIcon from "@/shared/components/ProviderIcon";
-import { ThemeToggle, LanguageSwitcher } from "@/shared/components";
+import { LanguageSwitcher } from "@/shared/components";
 import NineRemoteButton from "@/shared/components/NineRemoteButton";
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS } from "@/shared/constants/config";
 import { translate } from "@/i18n/runtime";
@@ -224,9 +224,6 @@ export default function Header({ onMenuClick, showMenuButton = true }) {
 
         {/* Language switcher */}
         <LanguageSwitcher />
-
-        {/* Theme toggle */}
-        <ThemeToggle />
 
         {/* Logout button */}
         <button

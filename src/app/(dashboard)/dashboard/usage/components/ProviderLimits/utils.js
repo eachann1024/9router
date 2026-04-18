@@ -165,13 +165,25 @@ export function parseQuotaData(provider, data) {
         break;
 
       case "glm-cn":
-        if (data.quotas) {
+      case "kimi":
+        if (data.message) {
+          normalizedQuotas.push({
+            name: "info",
+            used: 0,
+            total: 0,
+            resetAt: null,
+            message: data.message,
+          });
+        } else if (data.quotas) {
           Object.entries(data.quotas).forEach(([name, quota]) => {
             normalizedQuotas.push({
               name,
               used: quota.used || 0,
               total: quota.total || 0,
               resetAt: quota.resetAt || null,
+              remaining: quota.remaining,
+              remainingPercentage: quota.remainingPercentage,
+              unlimited: quota.unlimited || false,
             });
           });
         }

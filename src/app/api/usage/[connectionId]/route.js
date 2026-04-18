@@ -168,6 +168,10 @@ async function getApiKeyProviderUsage(connection) {
       const { getGlmCnUsage } = await import("@/lib/usage/glmCnUsage");
       return await getGlmCnUsage(connection);
     }
+    case "kimi": {
+      const { getKimiUsage } = await import("@/lib/usage/kimiUsage");
+      return await getKimiUsage(connection);
+    }
     default:
       return { message: `Usage API not implemented for ${connection.provider}` };
   }

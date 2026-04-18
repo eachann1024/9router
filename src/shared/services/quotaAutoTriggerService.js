@@ -7,6 +7,10 @@ import {
 } from "@/lib/localDb";
 import { USAGE_SUPPORTED_PROVIDERS } from "@/shared/constants/providers";
 import {
+  getMsUntilNextWindow,
+  normalizeQuotaAutoTriggerStartHour,
+} from "@/shared/services/quotaAutoTriggerSchedule";
+import {
   PROVIDER_ID_TO_ALIAS,
   getModelsByProviderId,
 } from "open-sse/config/providerModels.js";
@@ -19,7 +23,7 @@ const INTERNAL_BASE_URL =
   process.env.NEXT_PUBLIC_BASE_URL ||
   `http://127.0.0.1:${process.env.PORT || "20128"}`;
 
-const QUOTA_AUTO_TRIGGER_INTERVAL_MS = 60 * 60 * 1000;
+
 // Count-based quota providers - warmup ping wastes quota
 const WARMUP_EXCLUDED_PROVIDERS = new Set(["github"]);
 const ANTIGRAVITY_WARMUP_MODEL_IDS = new Set([
@@ -173,13 +177,14 @@ function analyzeQuotaRefreshability(usage) {
   };
 }
 
-export async function getQuotaAutoTriggerConnections() {
+export async function getQuotaAutoTriggerConnections({ enabledOnly = true, includeWarmupExcluded = false } = {}) {
   const connections = await getProviderConnections();
   const supportedConnections = connections.filter((connection) =>
     connection.authType === "oauth"
     && connection.isActive !== false
     && USAGE_SUPPORTED_PROVIDERS.includes(connection.provider)
-    && !WARMUP_EXCLUDED_PROVIDERS.has(connection.provider)
+    && (includeWarmupExcluded || !WARMUP_EXCLUDED_PROVIDERS.has(connection.provider))
+    && (!enabledOnly || connection.quotaAutoTriggerEnabled !== false)
   );
 
   return sortQuotaConnections(supportedConnections);
@@ -187,16 +192,19 @@ export async function getQuotaAutoTriggerConnections() {
 
 export async function getQuotaAutoTriggerSnapshot() {
   const settings = await getSettings();
-  const connections = await getQuotaAutoTriggerConnections();
+  // Show all eligible connections (regardless of per-connection enabled) for UI display
+  const connections = await getQuotaAutoTriggerConnections({ enabledOnly: false, includeWarmupExcluded: true });
 
   return {
     enabled: settings.quotaAutoTriggerEnabled === true,
+    startHour: normalizeQuotaAutoTriggerStartHour(settings.quotaAutoTriggerStartHour),
     running: false,
     lastRunAt: settings.quotaAutoTriggerLastRunAt || null,
     connections: connections.map((connection) => ({
       id: connection.id,
       provider: connection.provider,
       name: getConnectionLabel(connection),
+      enabled: connection.quotaAutoTriggerEnabled !== false,
       warmupState: connection.quotaWarmupState || null,
       targetModels: getTargetModelsForConnection(connection),
     })),
@@ -281,6 +289,10 @@ async function updateConnectionWarmupState(connection, modelResults, startedAt) 
 }
 
 async function runConnectionWarmup({ connection, baseUrl, apiKey }) {
+  // Count-based quota providers (e.g. github) don't need warmup pings - skip silently
+  if (WARMUP_EXCLUDED_PROVIDERS.has(connection.provider)) {
+    return;
+  }
   const startedAt = new Date().toISOString();
   const models = getTargetModelsForConnection(connection);
   let currentState = await persistWarmupState(connection.id, connection.quotaWarmupState || {}, {
@@ -382,7 +394,7 @@ async function runConnectionWarmup({ connection, baseUrl, apiKey }) {
 
 export class QuotaAutoTriggerService {
   constructor() {
-    this.intervalId = null;
+    this.timeoutId = null;
     this.runningPromise = null;
     this.started = false;
   }
@@ -394,31 +406,90 @@ export class QuotaAutoTriggerService {
     // Clean up stale running states from previous server process
     await this.#cleanupStaleWarmupStates();
 
-    this.intervalId = setInterval(() => {
-      this.run({ reason: "interval" }).catch((error) => {
-        console.error("[QuotaAutoTrigger] Interval run failed:", error);
-      });
-    }, QUOTA_AUTO_TRIGGER_INTERVAL_MS);
-
-    if (this.intervalId?.unref) {
-      this.intervalId.unref();
-    }
+    await this.#scheduleNextWindow();
 
     this.run({ reason: "startup" }).catch((error) => {
       console.error("[QuotaAutoTrigger] Startup run failed:", error);
     });
   }
 
+  async #scheduleNextWindow() {
+    const settings = await getSettings();
+    const startHour = normalizeQuotaAutoTriggerStartHour(settings.quotaAutoTriggerStartHour);
+    const msUntilNext = getMsUntilNextWindow(new Date(), startHour);
+    const nextHour = new Date(Date.now() + msUntilNext);
+    console.log(`[QuotaAutoTrigger] Next window trigger scheduled at ${nextHour.toLocaleTimeString()} (in ${Math.round(msUntilNext / 60000)}m)`);
+
+    this.timeoutId = setTimeout(() => {
+      this.run({ reason: "window" }).catch((error) => {
+        console.error("[QuotaAutoTrigger] Window run failed:", error);
+      });
+      this.#scheduleNextWindow().catch((error) => {
+        console.error("[QuotaAutoTrigger] Reschedule failed:", error);
+      });
+    }, msUntilNext);
+
+    if (this.timeoutId?.unref) {
+      this.timeoutId.unref();
+    }
+  }
+
   stop() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
     }
     this.started = false;
   }
 
+  async reschedule() {
+    if (this.timeoutId) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId = null;
+    }
+
+    if (!this.started) return;
+    await this.#scheduleNextWindow();
+  }
+
   isRunning() {
     return this.runningPromise !== null;
+  }
+
+  hasActiveRuns() {
+    return this.isRunning() || (this.connectionRunningSet?.size ?? 0) > 0;
+  }
+
+  getRunningConnectionIds() {
+    return new Set(this.connectionRunningSet || []);
+  }
+
+  isConnectionRunning(connectionId) {
+    return this.connectionRunningSet?.has(connectionId) ?? false;
+  }
+
+  async runForConnection(connectionId) {
+    if (!this.connectionRunningSet) this.connectionRunningSet = new Set();
+    if (this.connectionRunningSet.has(connectionId)) {
+      return { skipped: true, reason: "already-running" };
+    }
+
+    this.connectionRunningSet.add(connectionId);
+    const connections = await getProviderConnections();
+    const connection = connections.find((c) => c.id === connectionId);
+    if (!connection) {
+      this.connectionRunningSet.delete(connectionId);
+      throw new Error(`Connection not found: ${connectionId}`);
+    }
+
+    try {
+      const apiKey = await getInternalApiKey();
+      const baseUrl = INTERNAL_BASE_URL;
+      await runConnectionWarmup({ connection, baseUrl, apiKey });
+      return { ok: true };
+    } finally {
+      this.connectionRunningSet.delete(connectionId);
+    }
   }
 
   async run({ reason = "manual", force = false } = {}) {

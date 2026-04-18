@@ -4,6 +4,11 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { THEME_CONFIG } from "@/shared/constants/config";
 
+const THEME_COLOR = {
+  light: "#FBF9F6",
+  dark: "#191918",
+};
+
 const useThemeStore = create(
   persist(
     (set, get) => ({
@@ -12,13 +17,6 @@ const useThemeStore = create(
       setTheme: (theme) => {
         set({ theme });
         applyTheme(theme);
-      },
-
-      toggleTheme: () => {
-        const currentTheme = get().theme;
-        const newTheme = currentTheme === "dark" ? "light" : "dark";
-        set({ theme: newTheme });
-        applyTheme(newTheme);
       },
 
       initTheme: () => {
@@ -33,22 +31,35 @@ const useThemeStore = create(
 );
 
 // Apply theme to document
-function applyTheme(theme) {
-  if (typeof window === "undefined") return;
-
-  const root = document.documentElement;
-  const systemTheme = window.matchMedia("(prefers-color-scheme: dark)").matches
+export function getSystemTheme() {
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
+}
 
-  const effectiveTheme = theme === "system" ? systemTheme : theme;
+function syncThemeColorMeta(theme) {
+  const existingMeta = document.querySelector('meta[name="theme-color"]');
+  const meta =
+    existingMeta ||
+    Object.assign(document.createElement("meta"), { name: "theme-color" });
 
-  if (effectiveTheme === "dark") {
-    root.classList.add("dark");
-  } else {
-    root.classList.remove("dark");
+  meta.setAttribute("content", THEME_COLOR[theme]);
+
+  if (!existingMeta) {
+    document.head.appendChild(meta);
   }
 }
 
-export default useThemeStore;
+export function applyTheme(theme) {
+  if (typeof window === "undefined") return;
 
+  const root = document.documentElement;
+  const effectiveTheme = theme === "system" ? getSystemTheme() : theme;
+
+  root.classList.toggle("dark", effectiveTheme === "dark");
+  root.style.colorScheme = effectiveTheme;
+  syncThemeColorMeta(effectiveTheme);
+}
+
+export default useThemeStore;

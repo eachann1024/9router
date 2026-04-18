@@ -2,12 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Card, Button, Toggle, Input } from "@/shared/components";
-import { useTheme } from "@/shared/hooks/useTheme";
-import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG } from "@/shared/constants/config";
 
 export default function ProfilePage() {
-  const { theme, setTheme, isDark } = useTheme();
   const [settings, setSettings] = useState({ fallbackStrategy: "fill-first" });
   const [loading, setLoading] = useState(true);
   const [passwords, setPasswords] = useState({ current: "", new: "", confirm: "" });
@@ -345,26 +342,6 @@ export default function ProfilePage() {
                 <h2 className="text-xl font-semibold">Local Mode</h2>
                 <p className="text-text-muted">Running on your machine</p>
               </div>
-            </div>
-            <div className="inline-flex p-1 rounded-lg bg-black/5 dark:bg-white/5">
-              {["light", "dark", "system"].map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setTheme(option)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all",
-                    theme === option
-                      ? "bg-white dark:bg-white/10 text-text-main shadow-sm"
-                      : "text-text-muted hover:text-text-main"
-                  )}
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    {option === "light" ? "light_mode" : option === "dark" ? "dark_mode" : "contrast"}
-                  </span>
-                  <span className="capitalize text-sm">{option}</span>
-                </button>
-              ))}
             </div>
           </div>
           <div className="flex flex-col gap-3 pt-4 border-t border-border">

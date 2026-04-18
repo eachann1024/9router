@@ -8,8 +8,9 @@ import {
   isValidApiKey,
 } from "../services/auth.js";
 import { cacheClaudeHeaders } from "open-sse/utils/claudeHeaderCache.js";
-import { getSettings } from "@/lib/localDb";
+import { getSettings, getProviderConnections } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
+import { resolveProviderId } from "@/shared/constants/providers.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { handleComboChat } from "open-sse/services/combo.js";
@@ -22,6 +23,38 @@ import { QUOTA_TARGET_CONNECTION_HEADER } from "@/shared/services/quotaAutoTrigg
 
 function getPreferredConnectionId(request) {
   return request?.headers?.get(QUOTA_TARGET_CONNECTION_HEADER) || null;
+}
+
+/**
+ * Filter combo models to exclude those whose providers are fully disabled (isActive=false).
+ * Returns the filtered list, or the original list if all providers are disabled
+ * (so the caller still gets meaningful error messages).
+ */
+async function filterEnabledComboModels(models) {
+  const enabled = [];
+  const skipped = [];
+
+  for (const modelStr of models) {
+    const modelInfo = await getModelInfo(modelStr);
+    if (!modelInfo.provider) {
+      enabled.push(modelStr);
+      continue;
+    }
+    const providerId = resolveProviderId(modelInfo.provider);
+    const connections = await getProviderConnections({ provider: providerId, isActive: true });
+    if (connections.length > 0) {
+      enabled.push(modelStr);
+    } else {
+      skipped.push(modelStr);
+    }
+  }
+
+  if (skipped.length > 0) {
+    log.info("COMBO", `Skipping ${skipped.length} model(s) from disabled providers: ${skipped.join(", ")}`);
+  }
+
+  // If all providers are disabled, fall back to the full list so errors are descriptive
+  return enabled.length > 0 ? enabled : models;
 }
 
 /**
@@ -97,10 +130,13 @@ export async function handleChat(request, clientRawRequest = null) {
     const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
     const comboStrategy = comboSpecificStrategy || settings.comboStrategy || "fallback";
 
-    log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: ${comboStrategy})`);
+    // Filter out models from disabled providers before attempting
+    const activeComboModels = await filterEnabledComboModels(comboModels);
+
+    log.info("CHAT", `Combo "${modelStr}" with ${activeComboModels.length}/${comboModels.length} models (strategy: ${comboStrategy})`);
     return handleComboChat({
       body,
-      models: comboModels,
+      models: activeComboModels,
       handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, preferredConnectionId),
       log,
       comboName: modelStr,
@@ -128,10 +164,13 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
       const comboSpecificStrategy = comboStrategies[modelStr]?.fallbackStrategy;
       const comboStrategy = comboSpecificStrategy || chatSettings.comboStrategy || "fallback";
 
-      log.info("CHAT", `Combo "${modelStr}" with ${comboModels.length} models (strategy: ${comboStrategy})`);
+      // Filter out models from disabled providers before attempting
+      const activeComboModels = await filterEnabledComboModels(comboModels);
+
+      log.info("CHAT", `Combo "${modelStr}" with ${activeComboModels.length}/${comboModels.length} models (strategy: ${comboStrategy})`);
       return handleComboChat({
         body,
-        models: comboModels,
+        models: activeComboModels,
         handleSingleModel: (b, m) => handleSingleModelChat(b, m, clientRawRequest, request, apiKey, preferredConnectionId),
         log,
         comboName: modelStr,

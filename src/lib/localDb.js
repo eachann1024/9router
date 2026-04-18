@@ -59,6 +59,7 @@ const defaultData = {
     comboStrategies: {},
     requireLogin: true,
     quotaAutoTriggerEnabled: false,
+    quotaAutoTriggerStartHour: 0,
     quotaAutoTriggerLastRunAt: "",
     observabilityEnabled: true,
     observabilityMaxRecords: 1000,

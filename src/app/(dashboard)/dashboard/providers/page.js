@@ -234,6 +234,86 @@ export default function ProvidersPage() {
       textIcon: "AC",
     }));
 
+  // Build flat list of all known providers with their stats/card metadata
+  const allProviderEntries = [
+    ...Object.entries(OAUTH_PROVIDERS).map(([key, info]) => ({
+      id: key,
+      provider: info,
+      statsAuthType: "oauth",
+      cardAuthType: "oauth",
+      cardType: "oauth",
+    })),
+    ...Object.entries(FREE_PROVIDERS).map(([key, info]) => ({
+      id: key,
+      provider: info,
+      statsAuthType: "oauth",
+      cardAuthType: "free",
+      cardType: "oauth",
+    })),
+    ...Object.entries(FREE_TIER_PROVIDERS).map(([key, info]) => ({
+      id: key,
+      provider: info,
+      statsAuthType: "apikey",
+      cardAuthType: "apikey",
+      cardType: "apikey",
+    })),
+    ...Object.entries(APIKEY_PROVIDERS).map(([key, info]) => ({
+      id: key,
+      provider: info,
+      statsAuthType: "apikey",
+      cardAuthType: "apikey",
+      cardType: "apikey",
+    })),
+    ...[...compatibleProviders, ...anthropicCompatibleProviders].map((info) => ({
+      id: info.id,
+      provider: info,
+      statsAuthType: "apikey",
+      cardAuthType: "compatible",
+      cardType: "apikey",
+    })),
+  ];
+
+  const configuredProviders = allProviderEntries
+    .map((p) => ({ ...p, stats: getProviderStats(p.id, p.statsAuthType) }))
+    .filter((p) => p.stats.total > 0)
+    .sort((a, b) => {
+      // Sort key: 0 = active+healthy, 1 = active+error, 2 = disabled
+      const rank = (p) => {
+        if (p.stats.allDisabled) return 2;
+        if (p.stats.connected > 0 && p.stats.error === 0) return 0;
+        return 1;
+      };
+      const rankDiff = rank(a) - rank(b);
+      if (rankDiff !== 0) return rankDiff;
+      if (a.stats.connected !== b.stats.connected) {
+        return b.stats.connected - a.stats.connected;
+      }
+      if (a.stats.error !== b.stats.error) {
+        return b.stats.error - a.stats.error;
+      }
+      return a.provider.name.localeCompare(b.provider.name);
+    });
+
+  const configuredProviderIds = new Set(
+    configuredProviders.map((providerEntry) => providerEntry.id),
+  );
+  const visibleOAuthProviders = Object.entries(OAUTH_PROVIDERS).filter(
+    ([key]) => !configuredProviderIds.has(key),
+  );
+  const visibleFreeProviders = Object.entries(FREE_PROVIDERS).filter(
+    ([key]) => !configuredProviderIds.has(key),
+  );
+  const visibleFreeTierProviders = Object.entries(FREE_TIER_PROVIDERS).filter(
+    ([key]) => !configuredProviderIds.has(key),
+  );
+  const visibleApiKeyProviders = Object.entries(APIKEY_PROVIDERS).filter(
+    ([key]) => !configuredProviderIds.has(key),
+  );
+  const visibleCompatibleProviders = [
+    ...compatibleProviders,
+    ...anthropicCompatibleProviders,
+  ].filter((provider) => !configuredProviderIds.has(provider.id));
+
   if (loading) {
     return (
       <div className="flex flex-col gap-8">
@@ -245,135 +325,184 @@ export default function ProvidersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* OAuth Providers */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+      {/* Configured Providers — pinned to top */}
+      {configuredProviders.length > 0 && (
+        <div className="flex flex-col gap-4">
           <h2 className="text-xl font-semibold flex items-center gap-2">
-            OAuth Providers
+            Configured Providers
+            <span className="text-sm font-normal text-text-muted">
+              ({configuredProviders.filter((p) => !p.stats.allDisabled).length} active
+              {configuredProviders.some((p) => p.stats.allDisabled)
+                ? `, ${configuredProviders.filter((p) => p.stats.allDisabled).length} disabled`
+                : ""}
+              )
+            </span>
           </h2>
-          <div className="flex items-center gap-2">
-            <ModelAvailabilityBadge />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {configuredProviders.map((p) =>
+              p.cardType === "oauth" ? (
+                <ProviderCard
+                  key={p.id}
+                  providerId={p.id}
+                  provider={p.provider}
+                  stats={p.stats}
+                  authType={p.cardAuthType}
+                  onToggle={(active) =>
+                    handleToggleProvider(p.id, p.statsAuthType, active)
+                  }
+                />
+              ) : (
+                <ApiKeyProviderCard
+                  key={p.id}
+                  providerId={p.id}
+                  provider={p.provider}
+                  stats={p.stats}
+                  authType={p.cardAuthType}
+                  onToggle={(active) =>
+                    handleToggleProvider(p.id, p.statsAuthType, active)
+                  }
+                />
+              ),
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* OAuth Providers */}
+      {visibleOAuthProviders.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              OAuth Providers
+            </h2>
+            <div className="flex items-center gap-2">
+              <ModelAvailabilityBadge />
+              <button
+                onClick={() => handleBatchTest("oauth")}
+                disabled={!!testingMode}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                  testingMode === "oauth"
+                    ? "bg-primary/20 border-primary/40 text-primary animate-pulse"
+                    : "bg-bg border-border text-text-muted hover:text-text-main hover:border-primary/40"
+                }`}
+                title="Test all OAuth connections"
+                aria-label="Test all OAuth connections"
+              >
+                <span
+                  className={`material-symbols-outlined text-[14px]${testingMode === "oauth" ? " animate-spin" : ""}`}
+                >
+                  {testingMode === "oauth" ? "sync" : "play_arrow"}
+                </span>
+                {testingMode === "oauth" ? "Testing..." : "Test All"}
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {visibleOAuthProviders.map(([key, info]) => (
+              <ProviderCard
+                key={key}
+                providerId={key}
+                provider={info}
+                stats={getProviderStats(key, "oauth")}
+                authType="oauth"
+                onToggle={(active) => handleToggleProvider(key, "oauth", active)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Free & Free Tier Providers */}
+      {(visibleFreeProviders.length > 0 || visibleFreeTierProviders.length > 0) && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              Free Providers
+            </h2>
             <button
-              onClick={() => handleBatchTest("oauth")}
+              onClick={() => handleBatchTest("free")}
               disabled={!!testingMode}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                testingMode === "oauth"
+                testingMode === "free"
                   ? "bg-primary/20 border-primary/40 text-primary animate-pulse"
                   : "bg-bg border-border text-text-muted hover:text-text-main hover:border-primary/40"
               }`}
-              title="Test all OAuth connections"
-              aria-label="Test all OAuth connections"
+              title="Test all Free connections"
+              aria-label="Test all Free provider connections"
             >
               <span
-                className={`material-symbols-outlined text-[14px]${testingMode === "oauth" ? " animate-spin" : ""}`}
+                className={`material-symbols-outlined text-[14px]${testingMode === "free" ? " animate-spin" : ""}`}
               >
-                {testingMode === "oauth" ? "sync" : "play_arrow"}
+                {testingMode === "free" ? "sync" : "play_arrow"}
               </span>
-              {testingMode === "oauth" ? "Testing..." : "Test All"}
+              {testingMode === "free" ? "Testing..." : "Test All"}
             </button>
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {visibleFreeProviders.map(([key, info]) => (
+              <ProviderCard
+                key={key}
+                providerId={key}
+                provider={info}
+                stats={getProviderStats(key, "oauth")}
+                authType="free"
+                onToggle={(active) => handleToggleProvider(key, "oauth", active)}
+              />
+            ))}
+            {visibleFreeTierProviders.map(([key, info]) => (
+              <ApiKeyProviderCard
+                key={key}
+                providerId={key}
+                provider={info}
+                stats={getProviderStats(key, "apikey")}
+                authType="apikey"
+                onToggle={(active) => handleToggleProvider(key, "apikey", active)}
+              />
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Object.entries(OAUTH_PROVIDERS).map(([key, info]) => (
-            <ProviderCard
-              key={key}
-              providerId={key}
-              provider={info}
-              stats={getProviderStats(key, "oauth")}
-              authType="oauth"
-              onToggle={(active) => handleToggleProvider(key, "oauth", active)}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Free & Free Tier Providers */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            Free Providers
-          </h2>
-          <button
-            onClick={() => handleBatchTest("free")}
-            disabled={!!testingMode}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              testingMode === "free"
-                ? "bg-primary/20 border-primary/40 text-primary animate-pulse"
-                : "bg-bg border-border text-text-muted hover:text-text-main hover:border-primary/40"
-            }`}
-            title="Test all Free connections"
-            aria-label="Test all Free provider connections"
-          >
-            <span
-              className={`material-symbols-outlined text-[14px]${testingMode === "free" ? " animate-spin" : ""}`}
-            >
-              {testingMode === "free" ? "sync" : "play_arrow"}
-            </span>
-            {testingMode === "free" ? "Testing..." : "Test All"}
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Object.entries(FREE_PROVIDERS).map(([key, info]) => (
-            <ProviderCard
-              key={key}
-              providerId={key}
-              provider={info}
-              stats={getProviderStats(key, "oauth")}
-              authType="free"
-              onToggle={(active) => handleToggleProvider(key, "oauth", active)}
-            />
-          ))}
-          {Object.entries(FREE_TIER_PROVIDERS).map(([key, info]) => (
-            <ApiKeyProviderCard
-              key={key}
-              providerId={key}
-              provider={info}
-              stats={getProviderStats(key, "apikey")}
-              authType="apikey"
-              onToggle={(active) => handleToggleProvider(key, "apikey", active)}
-            />
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* API Key Providers — fixed list */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            API Key Providers{" "}
-          </h2>
-          <button
-            onClick={() => handleBatchTest("apikey")}
-            disabled={!!testingMode}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-              testingMode === "apikey"
-                ? "bg-primary/20 border-primary/40 text-primary animate-pulse"
-                : "bg-bg border-border text-text-muted hover:text-text-main hover:border-primary/40"
-            }`}
-            title="Test all API Key connections"
-            aria-label="Test all API Key connections"
-          >
-            <span
-              className={`material-symbols-outlined text-[14px]${testingMode === "apikey" ? " animate-spin" : ""}`}
+      {visibleApiKeyProviders.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              API Key Providers{" "}
+            </h2>
+            <button
+              onClick={() => handleBatchTest("apikey")}
+              disabled={!!testingMode}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                testingMode === "apikey"
+                  ? "bg-primary/20 border-primary/40 text-primary animate-pulse"
+                  : "bg-bg border-border text-text-muted hover:text-text-main hover:border-primary/40"
+              }`}
+              title="Test all API Key connections"
+              aria-label="Test all API Key connections"
             >
-              {testingMode === "apikey" ? "sync" : "play_arrow"}
-            </span>
-            {testingMode === "apikey" ? "Testing..." : "Test All"}
-          </button>
+              <span
+                className={`material-symbols-outlined text-[14px]${testingMode === "apikey" ? " animate-spin" : ""}`}
+              >
+                {testingMode === "apikey" ? "sync" : "play_arrow"}
+              </span>
+              {testingMode === "apikey" ? "Testing..." : "Test All"}
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {visibleApiKeyProviders.map(([key, info]) => (
+              <ApiKeyProviderCard
+                key={key}
+                providerId={key}
+                provider={info}
+                stats={getProviderStats(key, "apikey")}
+                authType="apikey"
+                onToggle={(active) => handleToggleProvider(key, "apikey", active)}
+              />
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Object.entries(APIKEY_PROVIDERS).map(([key, info]) => (
-            <ApiKeyProviderCard
-              key={key}
-              providerId={key}
-              provider={info}
-              stats={getProviderStats(key, "apikey")}
-              authType="apikey"
-              onToggle={(active) => handleToggleProvider(key, "apikey", active)}
-            />
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* API Key Compatible Providers — dynamic (OpenAI/Anthropic compatible) */}
       <div className="flex flex-col gap-4">
@@ -430,22 +559,29 @@ export default function ProvidersPage() {
               endpoints
             </p>
           </div>
+        ) : visibleCompatibleProviders.length === 0 ? (
+          <div className="text-center py-8 border border-dashed border-border rounded-xl">
+            <span className="material-symbols-outlined text-[32px] text-text-muted mb-2">
+              push_pin
+            </span>
+            <p className="text-text-muted text-sm">
+              Configured compatible providers are pinned above
+            </p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {[...compatibleProviders, ...anthropicCompatibleProviders].map(
-              (info) => (
-                <ApiKeyProviderCard
-                  key={info.id}
-                  providerId={info.id}
-                  provider={info}
-                  stats={getProviderStats(info.id, "apikey")}
-                  authType="compatible"
-                  onToggle={(active) =>
-                    handleToggleProvider(info.id, "apikey", active)
-                  }
-                />
-              ),
-            )}
+            {visibleCompatibleProviders.map((info) => (
+              <ApiKeyProviderCard
+                key={info.id}
+                providerId={info.id}
+                provider={info}
+                stats={getProviderStats(info.id, "apikey")}
+                authType="compatible"
+                onToggle={(active) =>
+                  handleToggleProvider(info.id, "apikey", active)
+                }
+              />
+            ))}
           </div>
         )}
       </div>

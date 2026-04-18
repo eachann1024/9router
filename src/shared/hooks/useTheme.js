@@ -1,60 +1,38 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import useThemeStore from "@/store/themeStore";
 
-// Subscribe to system theme changes
-function subscribeToSystemTheme(callback) {
-  if (typeof window === "undefined") return () => {};
-  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  mediaQuery.addEventListener("change", callback);
-  return () => mediaQuery.removeEventListener("change", callback);
-}
-
-// Get current system theme preference
-function getSystemThemeSnapshot() {
+function getSystemPrefersDark() {
   if (typeof window === "undefined") return false;
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
-// Server snapshot always returns false
-function getServerSnapshot() {
-  return false;
-}
-
 export function useTheme() {
-  const { theme, setTheme, toggleTheme, initTheme } = useThemeStore();
+  const { theme, setTheme, initTheme } = useThemeStore();
+  const [systemPrefersDark, setSystemPrefersDark] = useState(getSystemPrefersDark());
 
-  // Use useSyncExternalStore to safely subscribe to system theme
-  const systemPrefersDark = useSyncExternalStore(
-    subscribeToSystemTheme,
-    getSystemThemeSnapshot,
-    getServerSnapshot
-  );
-
+  // Initialize and sync when theme or system preference changes
   useEffect(() => {
     initTheme();
-  }, [initTheme]);
+  }, [theme, systemPrefersDark, initTheme]);
 
-  // Listen for system theme changes when theme is "system"
+  // Track system theme changes
   useEffect(() => {
-    if (theme !== "system") return;
-
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => initTheme();
-
+    const handleChange = (e) => {
+      setSystemPrefersDark(e.matches);
+    };
     mediaQuery.addEventListener("change", handleChange);
+    setSystemPrefersDark(mediaQuery.matches); // Sync on mount
     return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [theme, initTheme]);
+  }, []);
 
-  // Compute isDark from current state (no effect needed)
   const isDark = theme === "dark" || (theme === "system" && systemPrefersDark);
 
   return {
     theme,
     setTheme,
-    toggleTheme,
     isDark,
   };
 }
-
