@@ -60,6 +60,14 @@ PUBLIC.en.md
 PR/*
 package-lock.json
 CHANGELOG.md
+AGENTS.md
+CLAUDE.md
+SKILL.md
+.agents/
+.claude/
+docs/ai/
+ai-docs/
+.ai/
 
 
 #Ignore vscode AI rules
