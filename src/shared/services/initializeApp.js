@@ -3,6 +3,7 @@ import { enableTunnel, isTunnelManuallyDisabled, isTunnelReconnecting } from "@/
 import { killCloudflared, isCloudflaredRunning, ensureCloudflared } from "@/lib/tunnel/cloudflared";
 import { getMitmStatus, startMitm, loadEncryptedPassword, initDbHooks } from "@/mitm/manager";
 import { getQuotaAutoTriggerService } from "@/shared/services/quotaAutoTriggerService";
+import { getOpenRouterFreeComboSyncService } from "@/shared/services/openrouterFreeComboSync";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { existsSync } from "fs";
@@ -105,6 +106,9 @@ export async function initializeApp() {
     if (!isBuildPhase()) {
       getQuotaAutoTriggerService().start().catch((error) => {
         console.error("[InitApp] Quota auto-trigger start failed:", error);
+      });
+      getOpenRouterFreeComboSyncService().start().catch((error) => {
+        console.error("[InitApp] OpenRouter free combo sync start failed:", error);
       });
     }
   } catch (error) {

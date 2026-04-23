@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getComboById, updateCombo, deleteCombo, getComboByName } from "@/lib/localDb";
+import { getComboById, updateCombo, deleteCombo, getComboByName, getSettings, updateSettings } from "@/lib/localDb";
 
 // Validate combo name: only a-z, A-Z, 0-9, -, _
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_.\-]+$/;
@@ -26,6 +26,11 @@ export async function PUT(request, { params }) {
   try {
     const { id } = await params;
     const body = await request.json();
+    const previousCombo = await getComboById(id);
+
+    if (!previousCombo) {
+      return NextResponse.json({ error: "Combo not found" }, { status: 404 });
+    }
     
     // Validate name format if provided
     if (body.name) {
@@ -41,9 +46,18 @@ export async function PUT(request, { params }) {
     }
     
     const combo = await updateCombo(id, body);
-    
-    if (!combo) {
-      return NextResponse.json({ error: "Combo not found" }, { status: 404 });
+
+    if (body.name && body.name !== previousCombo.name) {
+      const settings = await getSettings();
+      const comboStrategies = { ...(settings.comboStrategies || {}) };
+      if (comboStrategies[previousCombo.name]) {
+        comboStrategies[body.name] = {
+          ...comboStrategies[previousCombo.name],
+          openrouterFreeSyncComboId: combo.id,
+        };
+        delete comboStrategies[previousCombo.name];
+        await updateSettings({ comboStrategies });
+      }
     }
 
     return NextResponse.json(combo);
@@ -57,10 +71,20 @@ export async function PUT(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
+    const combo = await getComboById(id);
     const success = await deleteCombo(id);
     
     if (!success) {
       return NextResponse.json({ error: "Combo not found" }, { status: 404 });
+    }
+
+    if (combo) {
+      const settings = await getSettings();
+      const comboStrategies = { ...(settings.comboStrategies || {}) };
+      if (comboStrategies[combo.name]) {
+        delete comboStrategies[combo.name];
+        await updateSettings({ comboStrategies });
+      }
     }
     
     return NextResponse.json({ success: true });

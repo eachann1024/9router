@@ -93,6 +93,11 @@ export const COOLDOWN_MS = {
   authExpired: 2 * 60 * 1000
 };
 
+// Global account lock cooldown for quota-related errors
+// Account-level issues (quota exhausted, rate limits) affect all models,
+// so we use a longer cooldown to avoid repeatedly trying known-bad accounts
+export const GLOBAL_LOCK_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour
+
 // Requests containing these texts will bypass provider
 export const SKIP_PATTERNS = [
   "Please write a 5-10 word title for the following conversation:"

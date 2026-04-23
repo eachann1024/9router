@@ -15,6 +15,7 @@ import {
   getModelsByProviderId,
 } from "open-sse/config/providerModels.js";
 import { getUsageForProvider } from "open-sse/services/usage.js";
+import { buildClearModelLocksUpdate } from "open-sse/services/accountFallback.js";
 
 export const QUOTA_TARGET_CONNECTION_HEADER = "x-9router-target-connection-id";
 
@@ -286,6 +287,11 @@ async function updateConnectionWarmupState(connection, modelResults, startedAt) 
       models: nextModels,
     },
   });
+
+  // Clear locks when all models succeed — account is confirmed working
+  if (nextPhase === "success") {
+    await clearAccountLocksOnSuccess(connection);
+  }
 }
 
 async function runConnectionWarmup({ connection, baseUrl, apiKey }) {
@@ -309,6 +315,11 @@ async function runConnectionWarmup({ connection, baseUrl, apiKey }) {
 
   if (models.length === 0) {
     await updateProviderConnection(connection.id, {
+      ...buildClearModelLocksUpdate(connection),
+      testStatus: "active",
+      lastError: null,
+      lastErrorAt: null,
+      backoffLevel: 0,
       quotaWarmupState: {
         ...currentState,
         running: false,
@@ -390,6 +401,17 @@ async function runConnectionWarmup({ connection, baseUrl, apiKey }) {
     ...connection,
     quotaWarmupState: currentState,
   }, results, startedAt);
+}
+
+/** Clear account locks and restore active status when warmup succeeds */
+async function clearAccountLocksOnSuccess(connection) {
+  await updateProviderConnection(connection.id, {
+    ...buildClearModelLocksUpdate(connection),
+    testStatus: "active",
+    lastError: null,
+    lastErrorAt: null,
+    backoffLevel: 0,
+  });
 }
 
 export class QuotaAutoTriggerService {

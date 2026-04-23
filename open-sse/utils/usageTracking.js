@@ -15,8 +15,8 @@ export const COLORS = {
   cyan: "\x1b[36m"
 };
 
-// Buffer tokens to prevent context errors
-const BUFFER_TOKENS = 2000;
+// Buffer tokens to prevent context errors (kept at 0 — providers handle context limits)
+const BUFFER_TOKENS = 0;
 
 // Get HH:MM:SS timestamp
 function getTimeString() {

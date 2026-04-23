@@ -204,10 +204,11 @@ export default function ProviderDetailPage() {
   // Fetch suggested models: use server-side route for OpenRouter (authenticated, no cache),
   // fall back to client-side fetcher for other providers.
   useEffect(() => {
+    setSuggestedModels([]);
     if (providerId === "openrouter") {
-      fetch("/api/providers/openrouter/free-models")
+      fetch("/api/providers/openrouter/free-models", { cache: "no-store" })
         .then((res) => res.json())
-        .then((data) => { if (data.models?.length) setSuggestedModels(data.models); })
+        .then((data) => { setSuggestedModels(data.models || []); })
         .catch(() => {});
       return;
     }
@@ -593,7 +594,15 @@ export default function ProviderDetailPage() {
     const displayModels = [
       ...models,
       ...kiloFreeModels.filter((fm) => !models.some((m) => m.id === fm.id)),
+      ...(
+        providerId === "openrouter"
+          ? suggestedModels
+              .map((model) => ({ ...model, isFree: true }))
+              .filter((fm) => !models.some((m) => m.id === fm.id))
+          : []
+      ),
     ];
+    const displayModelIds = new Set(displayModels.map((model) => model.id));
     // Custom models added by user (stored as aliases: modelId → providerAlias/modelId)
     const customModels = Object.entries(modelAliases)
       .filter(([alias, fullModel]) => {
@@ -602,8 +611,8 @@ export default function ProviderDetailPage() {
         const modelId = fullModel.slice(prefix.length);
         // Only show if not already in hardcoded list
         // For passthroughModels, include all aliases (model IDs may contain slashes like "anthropic/claude-3")
-        if (providerInfo.passthroughModels) return !models.some((m) => m.id === modelId);
-        return !models.some((m) => m.id === modelId) && alias === modelId;
+        if (providerInfo.passthroughModels) return !displayModelIds.has(modelId);
+        return !displayModelIds.has(modelId) && alias === modelId;
       })
       .map(([alias, fullModel]) => ({
         id: fullModel.slice(`${providerStorageAlias}/`.length),
@@ -628,11 +637,12 @@ export default function ProviderDetailPage() {
               copied={copied}
               onCopy={copy}
               onSetAlias={(alias) => handleSetAlias(model.id, alias, providerStorageAlias)}
-              onDeleteAlias={() => handleDeleteAlias(existingAlias)}
+              onDeleteAlias={existingAlias ? () => handleDeleteAlias(existingAlias) : undefined}
               testStatus={modelTestResults[model.id]}
               onTest={connections.length > 0 ? () => handleTestModel(model.id) : undefined}
               isTesting={testingModelId === model.id}
               isFree={model.isFree}
+              isCustom={providerInfo.passthroughModels && !!existingAlias}
             />
           );
         })}
@@ -665,7 +675,7 @@ export default function ProviderDetailPage() {
         </button>
 
         {/* Suggested models from provider API — show only models not yet added */}
-        {suggestedModels.length > 0 && (() => {
+        {providerId !== "openrouter" && suggestedModels.length > 0 && (() => {
           const addedFullModels = new Set(Object.values(modelAliases));
           const notAdded = suggestedModels.filter(
             (m) => !addedFullModels.has(`${providerStorageAlias}/${m.id}`)
@@ -1045,6 +1055,11 @@ function ModelRow({ model, fullModel, alias, copied, onCopy, testStatus, isCusto
           {testStatus === "ok" ? "check_circle" : testStatus === "error" ? "cancel" : "smart_toy"}
         </span>
         <code className="text-xs text-text-muted font-mono bg-sidebar px-1.5 py-0.5 rounded">{fullModel}</code>
+        {isFree && (
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-500/10 text-green-600 dark:text-green-400">
+            FREE
+          </span>
+        )}
         {onTest && (
           <div className="relative group/btn">
             <button
@@ -2386,4 +2401,3 @@ AddCustomModelModal.propTypes = {
   onSave: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
 };
-

@@ -59,6 +59,7 @@ Thanks.md
 PUBLIC.en.md
 PR/*
 package-lock.json
+CHANGELOG.md
 
 
 #Ignore vscode AI rules
@@ -66,4 +67,3 @@ package-lock.json
 README1.md
 deploy*.sh
 ecosystem.config.*
-

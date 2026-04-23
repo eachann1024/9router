@@ -1,6 +1,7 @@
 import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings } from "@/lib/localDb";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
-import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
+import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil, MODEL_LOCK_ALL } from "open-sse/services/accountFallback.js";
+import { GLOBAL_LOCK_COOLDOWN_MS, HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
 import { resolveProviderId } from "@/shared/constants/providers.js";
 import * as log from "../utils/logger.js";
 
@@ -177,6 +178,22 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
   const reason = typeof errorText === "string" ? errorText.slice(0, 100) : "Provider error";
   const lockUpdate = buildModelLockUpdate(model, cooldownMs);
 
+  // For quota/rate-limit related errors, also set a global account lock
+  // because quota/capacity issues affect all models on the same account
+  const errorStr = (errorText || "").toLowerCase();
+  const isQuotaRelated =
+    status === HTTP_STATUS.RATE_LIMITED ||
+    errorStr.includes("quota exceeded") ||
+    errorStr.includes("rate limit") ||
+    errorStr.includes("too many requests") ||
+    errorStr.includes("capacity") ||
+    errorStr.includes("overloaded");
+
+  if (isQuotaRelated) {
+    const globalCooldownMs = Math.max(cooldownMs, GLOBAL_LOCK_COOLDOWN_MS);
+    Object.assign(lockUpdate, buildModelLockUpdate(null, globalCooldownMs));
+  }
+
   await updateProviderConnection(connectionId, {
     ...lockUpdate,
     testStatus: "unavailable",
@@ -186,9 +203,9 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     backoffLevel: newBackoffLevel ?? backoffLevel
   });
 
-  const lockKey = Object.keys(lockUpdate)[0];
+  const lockKeys = Object.keys(lockUpdate);
   const connName = conn?.displayName || conn?.name || conn?.email || connectionId.slice(0, 8);
-  log.warn("AUTH", `${connName} locked ${lockKey} for ${Math.round(cooldownMs / 1000)}s [${status}]`);
+  log.warn("AUTH", `${connName} locked ${lockKeys.join(", ")} for ${Math.round(cooldownMs / 1000)}s [${status}]`);
 
   if (provider && status && reason) {
     console.error(`❌ ${provider} [${status}]: ${reason}`);
@@ -213,10 +230,10 @@ export async function clearAccountError(connectionId, currentConnection, model =
 
   if (!conn.testStatus && !conn.lastError && allLockKeys.length === 0) return;
 
-  // Keys to clear: current model's lock + all expired locks
+  // Keys to clear: current model's lock + global lock + all expired locks
   const keysToClear = allLockKeys.filter(k => {
+    if (k === MODEL_LOCK_ALL) return true;                 // always clear global lock on success
     if (model && k === `modelLock_${model}`) return true; // succeeded model
-    if (model && k === "modelLock___all") return true;    // account-level lock
     const expiry = conn[k];
     return expiry && new Date(expiry).getTime() <= now;   // expired
   });

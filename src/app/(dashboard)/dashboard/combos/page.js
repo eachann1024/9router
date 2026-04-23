@@ -98,10 +98,17 @@ export default function CombosPage() {
   const handleToggleRoundRobin = async (comboName, enabled) => {
     try {
       const updated = { ...comboStrategies };
+      const current = updated[comboName] || {};
       if (enabled) {
-        updated[comboName] = { fallbackStrategy: "round-robin" };
+        updated[comboName] = { ...current, fallbackStrategy: "round-robin" };
       } else {
-        delete updated[comboName];
+        const next = { ...current };
+        delete next.fallbackStrategy;
+        if (Object.keys(next).length === 0) {
+          delete updated[comboName];
+        } else {
+          updated[comboName] = next;
+        }
       }
       
       await fetch("/api/settings", {
@@ -113,6 +120,35 @@ export default function CombosPage() {
       setComboStrategies(updated);
     } catch (error) {
       console.log("Error updating combo strategy:", error);
+    }
+  };
+
+  const handleToggleOpenRouterFree = async (combo, enabled) => {
+    try {
+      const res = await fetch("/api/combos/openrouter-free-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comboId: combo.id, comboName: combo.name, enabled }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to update OpenRouter free sync");
+        return;
+      }
+
+      if (data.combo) {
+        setCombos((prev) => prev.map((combo) => (
+          combo.id === data.combo.id ? data.combo : combo
+        )));
+      }
+      if (data.comboStrategies) {
+        setComboStrategies(data.comboStrategies);
+      } else {
+        await fetchData();
+      }
+    } catch (error) {
+      console.log("Error updating OpenRouter free sync:", error);
     }
   };
 
@@ -164,6 +200,8 @@ export default function CombosPage() {
               onCopy={copy}
               onEdit={() => setEditingCombo(combo)}
               onDelete={() => handleDelete(combo.id)}
+              openRouterFreeEnabled={comboStrategies[combo.name]?.openrouterFreeSyncEnabled === true}
+              onToggleOpenRouterFree={(enabled) => handleToggleOpenRouterFree(combo, enabled)}
               roundRobinEnabled={comboStrategies[combo.name]?.fallbackStrategy === "round-robin"}
               onToggleRoundRobin={(enabled) => handleToggleRoundRobin(combo.name, enabled)}
             />
@@ -193,7 +231,19 @@ export default function CombosPage() {
   );
 }
 
-function ComboCard({ combo, copied, onCopy, onEdit, onDelete, roundRobinEnabled, onToggleRoundRobin }) {
+function ComboCard({
+  combo,
+  copied,
+  onCopy,
+  onEdit,
+  onDelete,
+  openRouterFreeEnabled,
+  onToggleOpenRouterFree,
+  roundRobinEnabled,
+  onToggleRoundRobin,
+}) {
+  const showOpenRouterFreeToggle = combo.name === "free" || openRouterFreeEnabled;
+
   return (
     <Card padding="sm" className="group">
       <div className="flex items-center justify-between">
@@ -222,6 +272,16 @@ function ComboCard({ combo, copied, onCopy, onEdit, onDelete, roundRobinEnabled,
 
         {/* Actions */}
         <div className="flex items-center gap-3 shrink-0">
+          {showOpenRouterFreeToggle && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-text-muted font-medium">OpenRouter Free</span>
+              <Toggle
+                size="sm"
+                checked={openRouterFreeEnabled}
+                onChange={onToggleOpenRouterFree}
+              />
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-text-muted font-medium">{translate("Round Robin")}</span>
             <Toggle

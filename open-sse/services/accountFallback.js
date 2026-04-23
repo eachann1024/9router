@@ -169,11 +169,20 @@ export function isModelLockActive(connection, model) {
 /**
  * Get earliest active model lock expiry across all modelLock_* fields.
  * Used for UI cooldown display.
+ * Global lock (modelLock___all) is returned first since it affects ALL models.
  */
 export function getEarliestModelLockUntil(connection) {
   if (!connection) return null;
-  let earliest = null;
   const now = Date.now();
+
+  // Global lock affects ALL models — return its expiry first
+  const globalExpiry = connection[MODEL_LOCK_ALL];
+  if (globalExpiry) {
+    const t = new Date(globalExpiry).getTime();
+    if (t > now) return new Date(t).toISOString();
+  }
+
+  let earliest = null;
   for (const [key, val] of Object.entries(connection)) {
     if (!key.startsWith(MODEL_LOCK_PREFIX) || !val) continue;
     const t = new Date(val).getTime();
