@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { Card, Button, Badge, Input } from "@/shared/components";
 
+const DEFAULT_MITM_ROUTER_BASE = "http://localhost:20128";
+
 /**
  * Shared MITM infrastructure card — manages SSL cert + server start/stop.
  * DNS per-tool is handled separately in MitmToolCard.
@@ -15,6 +17,8 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   const [selectedApiKey, setSelectedApiKey] = useState("");
   const [pendingAction, setPendingAction] = useState(null);
   const [modalError, setModalError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [mitmRouterBaseUrl, setMitmRouterBaseUrl] = useState(DEFAULT_MITM_ROUTER_BASE);
 
   const isWindows = typeof navigator !== "undefined" && navigator.userAgent?.includes("Windows");
   const isAdmin = status?.isAdmin !== false;
@@ -35,6 +39,9 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
+        if (data.mitmRouterBaseUrl) {
+          setMitmRouterBaseUrl(data.mitmRouterBaseUrl);
+        }
         onStatusChange?.(data);
       }
     } catch {
@@ -43,6 +50,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
   };
 
   const handleAction = (action) => {
+    setActionError(null);
     if (isWindows || status?.hasCachedPassword) {
       doAction(action, "");
     } else {
@@ -54,6 +62,7 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
 
   const doAction = async (action, password) => {
     setLoading(true);
+    setActionError(null);
     try {
       let res;
       if (action === "trust-cert") {
@@ -69,7 +78,11 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
         res = await fetch("/api/cli-tools/antigravity-mitm", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ apiKey: keyToUse, sudoPassword: password }),
+          body: JSON.stringify({
+            apiKey: keyToUse,
+            sudoPassword: password,
+            mitmRouterBaseUrl: mitmRouterBaseUrl.trim() || DEFAULT_MITM_ROUTER_BASE,
+          }),
         });
       } else {
         res = await fetch("/api/cli-tools/antigravity-mitm", {
@@ -78,19 +91,16 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
           body: JSON.stringify({ sudoPassword: password }),
         });
       }
-
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setModalError(data.error || `Failed (HTTP ${res.status})`);
+        setActionError(data.error || `Failed to ${action} MITM server`);
         return;
       }
-
       setShowPasswordModal(false);
       setSudoPassword("");
-      setModalError(null);
       await fetchStatus();
-    } catch (err) {
-      setModalError(err.message || "Network error");
+    } catch (e) {
+      setActionError(e.message || "Network error");
     } finally {
       setLoading(false);
       setPendingAction(null);
@@ -148,25 +158,44 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
             </p>
           </div>
 
-          {/* API Key selector (only when stopped) */}
-          {!isRunning && (
+          {/* Base URL + API Key — same row pattern as Claude Code / cli-tools */}
+          <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-text-muted shrink-0">API Key</span>
-              {apiKeys?.length > 0 ? (
-                <select
-                  value={selectedApiKey}
-                  onChange={(e) => setSelectedApiKey(e.target.value)}
-                  className="flex-1 px-2 py-1 bg-surface rounded text-xs border border-border focus:outline-none focus:ring-1 focus:ring-primary/50"
-                >
-                  {apiKeys.map((key) => <option key={key.id} value={key.key}>{key.key}</option>)}
-                </select>
-              ) : (
-                <span className="text-xs text-text-muted">
-                  {cloudEnabled ? "No API keys — create one in Keys page" : "sk_9router (default)"}
-                </span>
-              )}
+              <span className="w-32 shrink-0 text-sm font-semibold text-text-main text-right">9Router Base URL</span>
+              <span className="material-symbols-outlined text-text-muted text-[14px]">arrow_forward</span>
+              <input
+                type="text"
+                value={mitmRouterBaseUrl}
+                onChange={(e) => setMitmRouterBaseUrl(e.target.value)}
+                placeholder={DEFAULT_MITM_ROUTER_BASE}
+                disabled={isRunning}
+                className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded border border-border text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50"
+              />
             </div>
-          )}
+            {!isRunning && (
+              <div className="flex items-center gap-2">
+                <span className="w-32 shrink-0 text-sm font-semibold text-text-main text-right">API Key</span>
+                <span className="material-symbols-outlined text-text-muted text-[14px]">arrow_forward</span>
+                {apiKeys?.length > 0 ? (
+                  <select
+                    value={selectedApiKey}
+                    onChange={(e) => setSelectedApiKey(e.target.value)}
+                    className="flex-1 min-w-0 px-2 py-1.5 bg-surface rounded text-xs border border-border text-text-main focus:outline-none focus:ring-1 focus:ring-primary/50"
+                  >
+                    {apiKeys.map((key) => (
+                      <option key={key.id} value={key.key}>
+                        {key.key}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="flex-1 px-2 py-1.5 text-xs text-text-muted">
+                    {cloudEnabled ? "No API keys — create one in Keys page" : "sk_9router (default)"}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 flex-wrap" data-i18n-skip="true">
@@ -204,6 +233,14 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
             )}
           </div>
 
+          {/* Action error */}
+          {actionError && (
+            <div className="flex items-start gap-2 px-2 py-1.5 rounded text-xs bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
+              <span className="material-symbols-outlined text-[14px] mt-0.5 shrink-0">error</span>
+              <span>{actionError}</span>
+            </div>
+          )}
+
           {/* Windows admin warning */}
           {isWindows && !isAdmin && (
             <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-red-500/10 text-red-600 border border-red-500/20">
@@ -234,12 +271,6 @@ export default function MitmServerCard({ apiKeys, cloudEnabled, onStatusChange }
               <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-red-500/10 text-red-600">
                 <span className="material-symbols-outlined text-[14px]">error</span>
                 <span>{modalError}</span>
-              </div>
-            )}
-            {loading && (
-              <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-primary/10 text-primary">
-                <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
-                <span>{pendingAction === "start" ? "Starting server, please wait…" : pendingAction === "trust-cert" ? "Trusting certificate…" : "Stopping server…"}</span>
               </div>
             )}
             <div className="flex items-center justify-end gap-2">

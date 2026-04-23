@@ -17,6 +17,7 @@ import { OAUTH_PROVIDERS, APIKEY_PROVIDERS } from "@/shared/constants/config";
 import {
   FREE_PROVIDERS,
   FREE_TIER_PROVIDERS,
+  WEB_COOKIE_PROVIDERS,
   OPENAI_COMPATIBLE_PREFIX,
   ANTHROPIC_COMPATIBLE_PREFIX,
 } from "@/shared/constants/providers";
@@ -522,7 +523,7 @@ export default function ProvidersPage() {
                 title="Test all Compatible connections"
               >
                 <span className={`material-symbols-outlined text-[14px]${testingMode === "compatible" ? " animate-spin" : ""}`}>
-                  {testingMode === "compatible" ? "sync" : "play_arrow"}
+                  play_arrow
                 </span>
                 {testingMode === "compatible" ? "Testing..." : "Test All"}
               </button>
@@ -636,6 +637,7 @@ export default function ProvidersPage() {
 
 function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
   const { connected, error, errorCode, errorTime, allDisabled } = stats;
+  const isNoAuth = !!provider.noAuth;
 
   const dotColors = {
     free: "bg-green-500",
@@ -687,6 +689,8 @@ function ProviderCard({ providerId, provider, stats, authType, onToggle }) {
                       Disabled
                     </span>
                   </Badge>
+                ) : isNoAuth ? (
+                  <Badge variant="success" size="sm" dot>Ready</Badge>
                 ) : (
                   <>
                     {getStatusDisplay(connected, error, errorCode)}

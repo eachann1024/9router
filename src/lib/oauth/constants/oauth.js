@@ -57,8 +57,8 @@ export const GEMINI_CONFIG = {
 // Qwen OAuth Configuration (Device Code Flow with PKCE)
 export const QWEN_CONFIG = {
   clientId: "f0304373b74a44d2b584a3fb70ca9e56",
-  deviceCodeUrl: "https://chat.qwen.ai/api/v1/oauth2/device/code",
-  tokenUrl: "https://chat.qwen.ai/api/v1/oauth2/token",
+  deviceCodeUrl: "https://qwen.ai/api/v1/oauth2/device/code",
+  tokenUrl: "https://qwen.ai/api/v1/oauth2/token",
   scope: "openid profile email model.completion",
   codeChallengeMethod: "S256",
 };
@@ -189,7 +189,7 @@ export const CURSOR_CONFIG = {
   agentEndpoint: "https://agent.api5.cursor.sh", // Privacy mode
   agentNonPrivacyEndpoint: "https://agentn.api5.cursor.sh", // Non-privacy mode
   // Client metadata
-  clientVersion: "0.48.6",
+  clientVersion: "3.1.0",
   clientType: "ide",
   // Token storage locations (for user reference)
   tokenStoragePaths: {

@@ -2,9 +2,21 @@ import pkg from "../../../package.json" with { type: "json" };
 
 // App configuration
 export const APP_CONFIG = {
-  name: "Endpoint Proxy",
+  name: "9Router proxy",
   description: "AI Infrastructure Management",
   version: pkg.version,
+};
+
+// GitHub configuration
+export const GITHUB_CONFIG = {
+  changelogUrl: "https://raw.githubusercontent.com/decolua/9router/refs/heads/master/CHANGELOG.md",
+};
+
+// Updater configuration
+export const UPDATER_CONFIG = {
+  npmPackageName: "9router",
+  installCmd: "npm i -g 9router",
+  exitDelayMs: 500,
 };
 
 // Theme configuration
@@ -56,6 +68,7 @@ export {
   FREE_PROVIDERS,
   OAUTH_PROVIDERS,
   APIKEY_PROVIDERS,
+  WEB_COOKIE_PROVIDERS,
   AI_PROVIDERS,
   AUTH_METHODS,
 } from "./providers.js";
