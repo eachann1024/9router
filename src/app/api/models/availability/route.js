@@ -35,10 +35,33 @@ export async function GET() {
           connectionId: connection.id,
           connectionName: connection.name || connection.email || connection.id,
           lastError: connection.lastError || null,
+          poolStatus: connection.poolStatus || "ready",
+          consecutiveFailures: connection.consecutiveFailures || 0,
+          quota: connection.hourlyQuota > 0
+            ? { used: connection.windowRequestCount || 0, limit: connection.hourlyQuota, resetAt: connection.windowResetAt }
+            : null,
         });
       }
 
-      if (locks.length === 0 && connection.testStatus === "unavailable") {
+      // Include pool-level cooldown/failed even if no model locks
+      if (locks.length === 0 && (connection.poolStatus === "cooldown" || connection.poolStatus === "failed")) {
+        models.push({
+          provider: connection.provider,
+          model: "__all",
+          status: connection.poolStatus,
+          until: connection.cooldownUntil || null,
+          connectionId: connection.id,
+          connectionName: connection.name || connection.email || connection.id,
+          lastError: connection.lastError || null,
+          poolStatus: connection.poolStatus,
+          consecutiveFailures: connection.consecutiveFailures || 0,
+          quota: connection.hourlyQuota > 0
+            ? { used: connection.windowRequestCount || 0, limit: connection.hourlyQuota, resetAt: connection.windowResetAt }
+            : null,
+        });
+      }
+
+      if (locks.length === 0 && connection.testStatus === "unavailable" && connection.poolStatus !== "cooldown" && connection.poolStatus !== "failed") {
         models.push({
           provider: connection.provider,
           model: "__all",
@@ -46,6 +69,11 @@ export async function GET() {
           connectionId: connection.id,
           connectionName: connection.name || connection.email || connection.id,
           lastError: connection.lastError || null,
+          poolStatus: connection.poolStatus || "ready",
+          consecutiveFailures: connection.consecutiveFailures || 0,
+          quota: connection.hourlyQuota > 0
+            ? { used: connection.windowRequestCount || 0, limit: connection.hourlyQuota, resetAt: connection.windowResetAt }
+            : null,
         });
       }
     }
@@ -86,6 +114,9 @@ export async function POST(request) {
                   lastError: null,
                   lastErrorAt: null,
                   backoffLevel: 0,
+                  consecutiveFailures: 0,
+                  poolStatus: "ready",
+                  cooldownUntil: null,
                 }
               : {}),
           }),

@@ -90,7 +90,7 @@ export function convertResponsesApiFormat(body) {
       // Skip items with empty/missing name — upstream APIs reject nameless tool calls (#444)
       if (!item.name || typeof item.name !== "string" || item.name.trim() === "") continue;
       currentAssistantMsg.tool_calls.push({
-        id: item.call_id,
+        id: item.call_id || `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: "function",
         function: {
           name: item.name,
@@ -107,7 +107,7 @@ export function convertResponsesApiFormat(body) {
       // Add tool result
       pendingToolResults.push({
         role: "tool",
-        tool_call_id: item.call_id,
+        tool_call_id: item.call_id || `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         content: typeof item.output === "string" ? item.output : JSON.stringify(item.output)
       });
     }

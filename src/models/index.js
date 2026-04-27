@@ -5,6 +5,8 @@ export {
   createProviderConnection,
   updateProviderConnection,
   deleteProviderConnection,
+  incrementWindowCount,
+  resetPoolState,
   getProviderNodes,
   getProviderNodeById,
   createProviderNode,

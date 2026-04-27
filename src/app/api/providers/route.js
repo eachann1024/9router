@@ -86,7 +86,7 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { provider, apiKey, name, priority, globalPriority, defaultModel, testStatus } = body;
+    const { provider, apiKey, name, priority, globalPriority, defaultModel, testStatus, hourlyQuota } = body;
     const proxyConfig = normalizeProxyConfig(body);
     if (proxyConfig.error) {
       return NextResponse.json({ error: proxyConfig.error }, { status: 400 });
@@ -175,6 +175,7 @@ export async function POST(request) {
       providerSpecificData: mergedProviderSpecificData,
       isActive: true,
       testStatus: testStatus || "unknown",
+      hourlyQuota: typeof hourlyQuota === "number" ? Math.max(0, hourlyQuota) : 0,
     });
 
     // Hide sensitive fields

@@ -261,7 +261,6 @@ export default function Header({ onMenuClick, showMenuButton = true }) {
         {/* Right actions menu */}
         <HeaderMenu onLogout={handleLogout} />
       </div>
-      </div>
     </header>
   );
 }

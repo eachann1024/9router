@@ -44,11 +44,16 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
       return null;
     }
 
-    // Filter out model-locked and excluded connections
+    const now = Date.now();
+
+    // Filter out model-locked, excluded, cooldown and quota-exhausted connections
     const availableConnections = connections.filter(c => {
       if (preferredConnectionId && c.id !== preferredConnectionId) return false;
       if (excludeSet.has(c.id)) return false;
       if (isModelLockActive(c, model)) return false;
+      if (c.poolStatus === "cooldown" && c.cooldownUntil && new Date(c.cooldownUntil).getTime() > now) return false;
+      if (c.poolStatus === "failed") return false;
+      if (c.hourlyQuota > 0 && (c.windowRequestCount || 0) >= c.hourlyQuota) return false;
       return true;
     });
 
@@ -130,8 +135,29 @@ export async function getProviderCredentials(provider, excludeConnectionIds = nu
         });
       }
     } else {
-      // Default: fill-first (already sorted by priority in getProviderConnections)
-      connection = availableConnections[0];
+      // Default: fill-first with smart candidate scoring
+      const scored = [...availableConnections].sort((a, b) => {
+        // 1. priority ascending (lower = higher priority)
+        const pDiff = (a.priority || 999) - (b.priority || 999);
+        if (pDiff !== 0) return pDiff;
+
+        // 2. remaining quota descending (more remaining = better)
+        const remA = a.hourlyQuota > 0 ? (a.hourlyQuota - (a.windowRequestCount || 0)) : Number.MAX_SAFE_INTEGER;
+        const remB = b.hourlyQuota > 0 ? (b.hourlyQuota - (b.windowRequestCount || 0)) : Number.MAX_SAFE_INTEGER;
+        const qDiff = remB - remA;
+        if (qDiff !== 0) return qDiff;
+
+        // 3. consecutive failures ascending (fewer failures = better)
+        const fDiff = (a.consecutiveFailures || 0) - (b.consecutiveFailures || 0);
+        if (fDiff !== 0) return fDiff;
+
+        // 4. last used ascending (longest idle = better)
+        if (!a.lastUsedAt && !b.lastUsedAt) return 0;
+        if (!a.lastUsedAt) return -1;
+        if (!b.lastUsedAt) return 1;
+        return new Date(a.lastUsedAt) - new Date(b.lastUsedAt);
+      });
+      connection = scored[0];
     }
 
     const resolvedProxy = await resolveConnectionProxyConfig(connection.providerSpecificData || {});
@@ -201,14 +227,27 @@ export async function markAccountUnavailable(connectionId, status, errorText, pr
     Object.assign(lockUpdate, buildModelLockUpdate(null, globalCooldownMs));
   }
 
-  await updateProviderConnection(connectionId, {
+  const nextConsecutiveFailures = (conn?.consecutiveFailures || 0) + 1;
+  const updates = {
     ...lockUpdate,
     testStatus: "unavailable",
     lastError: reason,
     errorCode: status,
     lastErrorAt: new Date().toISOString(),
-    backoffLevel: newBackoffLevel ?? backoffLevel
-  });
+    backoffLevel: newBackoffLevel ?? backoffLevel,
+    consecutiveFailures: nextConsecutiveFailures,
+  };
+
+  // Pool status machine: cooldown on 5+ failures, failed on 10+
+  if (nextConsecutiveFailures >= 10) {
+    updates.poolStatus = "failed";
+    updates.cooldownUntil = null;
+  } else if (nextConsecutiveFailures >= 5) {
+    updates.poolStatus = "cooldown";
+    updates.cooldownUntil = new Date(Date.now() + Math.max(cooldownMs, 5 * 60 * 1000)).toISOString();
+  }
+
+  await updateProviderConnection(connectionId, updates);
 
   const lockKeys = Object.keys(lockUpdate);
   const connName = conn?.displayName || conn?.name || conn?.email || connectionId.slice(0, 8);
@@ -259,7 +298,7 @@ export async function clearAccountError(connectionId, currentConnection, model =
 
   // Only reset error state if no active locks remain
   if (remainingActiveLocks.length === 0) {
-    Object.assign(clearObj, { testStatus: "active", lastError: null, lastErrorAt: null, backoffLevel: 0 });
+    Object.assign(clearObj, { testStatus: "active", lastError: null, lastErrorAt: null, backoffLevel: 0, consecutiveFailures: 0, poolStatus: "ready", cooldownUntil: null });
   }
 
   await updateProviderConnection(connectionId, clearObj);

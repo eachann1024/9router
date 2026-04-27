@@ -106,6 +106,18 @@ function ensureDbShape(data) {
         }
       }
     }
+
+    // Migrate providerConnections: add pool scheduling fields
+    if (key === "providerConnections" && Array.isArray(next.providerConnections)) {
+      for (const conn of next.providerConnections) {
+        if (typeof conn === "object" && conn !== null) {
+          if (conn.consecutiveFailures === undefined) { conn.consecutiveFailures = 0; changed = true; }
+          if (conn.hourlyQuota === undefined) { conn.hourlyQuota = 0; changed = true; }
+          if (conn.windowRequestCount === undefined) { conn.windowRequestCount = 0; changed = true; }
+          if (conn.poolStatus === undefined) { conn.poolStatus = "ready"; changed = true; }
+        }
+      }
+    }
   }
 
   return { data: next, changed };
@@ -213,15 +225,79 @@ export async function getDb() {
   return dbInstance;
 }
 
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Lazily reset window quota for a connection if the window has expired.
+ * Mutates the connection object in-place and persists if changed.
+ */
+function maybeResetWindow(conn) {
+  if (!conn || conn.hourlyQuota <= 0) return;
+  const now = Date.now();
+  if (!conn.windowResetAt || new Date(conn.windowResetAt).getTime() <= now) {
+    conn.windowRequestCount = 0;
+    conn.windowResetAt = new Date(now + HOUR_MS).toISOString();
+  }
+}
+
 export async function getProviderConnections(filter = {}) {
   const db = await getDb();
   let connections = db.data.providerConnections || [];
+
+  // Lazy window reset + persist if any changed
+  let anyReset = false;
+  for (const conn of connections) {
+    const beforeResetAt = conn.windowResetAt;
+    maybeResetWindow(conn);
+    if (conn.windowResetAt !== beforeResetAt) anyReset = true;
+  }
+  if (anyReset) await safeWrite(db);
 
   if (filter.provider) connections = connections.filter(c => c.provider === filter.provider);
   if (filter.isActive !== undefined) connections = connections.filter(c => c.isActive === filter.isActive);
 
   connections.sort((a, b) => (a.priority || 999) - (b.priority || 999));
   return connections;
+}
+
+/**
+ * Increment the window request count for a connection.
+ * Lazily resets the window if expired before incrementing.
+ */
+export async function incrementWindowCount(connectionId) {
+  const db = await getDb();
+  const index = db.data.providerConnections.findIndex(c => c.id === connectionId);
+  if (index === -1) return false;
+
+  const conn = db.data.providerConnections[index];
+  maybeResetWindow(conn);
+  conn.windowRequestCount = (conn.windowRequestCount || 0) + 1;
+  conn.updatedAt = new Date().toISOString();
+
+  await safeWrite(db);
+  return true;
+}
+
+/**
+ * Reset window count and pool status for a connection (manual reset).
+ */
+export async function resetPoolState(connectionId) {
+  const db = await getDb();
+  const index = db.data.providerConnections.findIndex(c => c.id === connectionId);
+  if (index === -1) return false;
+
+  db.data.providerConnections[index] = {
+    ...db.data.providerConnections[index],
+    windowRequestCount: 0,
+    windowResetAt: new Date(Date.now() + HOUR_MS).toISOString(),
+    consecutiveFailures: 0,
+    poolStatus: "ready",
+    cooldownUntil: null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await safeWrite(db);
+  return true;
 }
 
 export async function getProviderNodes(filter = {}) {
@@ -432,7 +508,9 @@ export async function createProviderConnection(data) {
     "accessToken", "refreshToken", "expiresAt", "tokenType",
     "scope", "idToken", "projectId", "apiKey", "testStatus",
     "lastTested", "lastError", "lastErrorAt", "rateLimitedUntil", "expiresIn", "errorCode",
-    "consecutiveUseCount"
+    "consecutiveUseCount",
+    "consecutiveFailures", "hourlyQuota", "windowRequestCount", "windowResetAt",
+    "poolStatus", "cooldownUntil",
   ];
 
   for (const field of optionalFields) {
@@ -697,7 +775,9 @@ export async function cleanupProviderConnections() {
     "accessToken", "refreshToken", "expiresAt", "tokenType",
     "scope", "idToken", "projectId", "apiKey", "testStatus",
     "lastTested", "lastError", "lastErrorAt", "rateLimitedUntil", "expiresIn",
-    "consecutiveUseCount"
+    "consecutiveUseCount",
+    "consecutiveFailures", "hourlyQuota", "windowRequestCount", "windowResetAt",
+    "poolStatus", "cooldownUntil",
   ];
 
   let cleaned = 0;

@@ -8,7 +8,7 @@ import {
   isValidApiKey,
 } from "../services/auth.js";
 import { cacheClaudeHeaders } from "open-sse/utils/claudeHeaderCache.js";
-import { getSettings, getProviderConnections } from "@/lib/localDb";
+import { getSettings, getProviderConnections, incrementWindowCount } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { resolveProviderId } from "@/shared/constants/providers.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
@@ -268,6 +268,7 @@ async function handleSingleModelChat(body, modelStr, clientRawRequest = null, re
         });
       },
       onRequestSuccess: async () => {
+        await incrementWindowCount(credentials.connectionId);
         await clearAccountError(credentials.connectionId, credentials, model);
       }
     });

@@ -108,6 +108,19 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
     return "default";
   };
 
+  const getPoolStatusVariant = () => {
+    const s = connection.poolStatus;
+    if (s === "ready") return "success";
+    if (s === "cooldown") return "warning";
+    if (s === "failed") return "error";
+    return "default";
+  };
+
+  const quota = connection.hourlyQuota > 0
+    ? { used: connection.windowRequestCount || 0, limit: connection.hourlyQuota }
+    : null;
+  const quotaPct = quota ? Math.min(100, Math.round((quota.used / quota.limit) * 100)) : 0;
+
   return (
     <div className={`group flex items-center justify-between p-2 rounded-lg hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors ${connection.isActive === false ? "opacity-60" : ""}`}>
       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -133,19 +146,30 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
         </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">{displayName}</p>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <Badge variant={getStatusVariant()} size="sm" dot>
               {connection.isActive === false ? "disabled" : (effectiveStatus || "Unknown")}
             </Badge>
+            {connection.poolStatus && connection.poolStatus !== "ready" && (
+              <Badge variant={getPoolStatusVariant()} size="sm">{connection.poolStatus}</Badge>
+            )}
             {hasAnyProxy && (
               <Badge variant={proxyBadgeVariant} size="sm">
                 Proxy
               </Badge>
             )}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
+            {connection.cooldownUntil && new Date(connection.cooldownUntil).getTime() > Date.now() && (
+              <CooldownTimer until={connection.cooldownUntil} />
+            )}
             {connection.lastError && connection.isActive !== false && (
               <span className="text-xs text-red-500 truncate max-w-[300px]" title={connection.lastError}>
                 {connection.lastError}
+              </span>
+            )}
+            {(connection.consecutiveFailures || 0) > 0 && (
+              <span className={`text-xs font-mono ${(connection.consecutiveFailures || 0) >= 3 ? "text-red-500" : "text-text-muted"}`}>
+                fails: {connection.consecutiveFailures}
               </span>
             )}
             <span className="text-xs text-text-muted">#{connection.priority}</span>
@@ -153,6 +177,17 @@ export default function ConnectionRow({ connection, proxyPools, isOAuth, isFirst
               <span className="text-xs text-text-muted">Auto: {connection.globalPriority}</span>
             )}
           </div>
+          {quota && (
+            <div className="mt-1 flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-black/5 dark:bg-white/5 rounded-full max-w-[120px]">
+                <div
+                  className={`h-full rounded-full ${quotaPct >= 100 ? "bg-red-500" : quotaPct >= 80 ? "bg-orange-500" : "bg-green-500"}`}
+                  style={{ width: `${quotaPct}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-text-muted font-mono">{quota.used}/{quota.limit}</span>
+            </div>
+          )}
           {hasAnyProxy && (
             <div className="mt-1 flex items-center gap-2 flex-wrap">
               <span className="text-[11px] text-text-muted truncate max-w-[420px]" title={proxyDisplayText}>

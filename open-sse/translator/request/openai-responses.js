@@ -10,7 +10,11 @@ import { normalizeResponsesInput } from "../helpers/responsesApiHelper.js";
 
 // Responses API enforces max 64 chars on call_id (#393)
 const MAX_CALL_ID_LEN = 64;
-const clampCallId = (id) => (typeof id === "string" && id.length > MAX_CALL_ID_LEN ? id.substring(0, MAX_CALL_ID_LEN) : id);
+const clampCallId = (id) => {
+  if (typeof id !== "string" || id === "") return undefined;
+  return id.length > MAX_CALL_ID_LEN ? id.substring(0, MAX_CALL_ID_LEN) : id;
+};
+const ensureCallId = (id) => clampCallId(id) || `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 /**
  * Convert OpenAI Responses API request to OpenAI Chat Completions format
@@ -78,7 +82,7 @@ export function openaiResponsesToOpenAIRequest(model, body, stream, credentials)
       // Skip items with empty/missing name — Codex/OpenAI reject nameless tool calls (#444)
       if (!item.name || typeof item.name !== "string" || item.name.trim() === "") continue;
       currentAssistantMsg.tool_calls.push({
-        id: item.call_id,
+        id: ensureCallId(item.call_id),
         type: "function",
         function: {
           name: item.name,
@@ -236,7 +240,7 @@ export function openaiToOpenAIResponsesRequest(model, body, stream, credentials)
       for (const tc of msg.tool_calls) {
         result.input.push({
           type: "function_call",
-          call_id: clampCallId(tc.id),
+          call_id: ensureCallId(tc.id),
           name: tc.function?.name || "_unknown",
           arguments: tc.function?.arguments || "{}"
         });
@@ -252,7 +256,7 @@ export function openaiToOpenAIResponsesRequest(model, body, stream, credentials)
           : JSON.stringify(msg.content);
       result.input.push({
         type: "function_call_output",
-        call_id: clampCallId(msg.tool_call_id),
+        call_id: ensureCallId(msg.tool_call_id),
         output
       });
     }

@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { BaseExecutor } from "./base.js";
 import { CODEX_DEFAULT_INSTRUCTIONS } from "../config/codexInstructions.js";
 import { PROVIDERS } from "../config/providers.js";
+import { OAUTH_ENDPOINTS } from "../config/appConstants.js";
 import { normalizeResponsesInput } from "../translator/helpers/responsesApiHelper.js";
 import { fetchImageAsBase64 } from "../translator/helpers/imageHelper.js";
 import { getConsistentMachineId } from "../../src/shared/utils/machineId.js";
@@ -86,6 +87,40 @@ export class CodexExecutor extends BaseExecutor {
     const headers = super.buildHeaders(credentials, stream);
     headers["session_id"] = this._currentSessionId || credentials?.connectionId || "default";
     return headers;
+  }
+
+  async refreshCredentials(credentials, log) {
+    if (!credentials.refreshToken) return null;
+    try {
+      const response = await fetch(OAUTH_ENDPOINTS.openai.token, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: credentials.refreshToken,
+          client_id: PROVIDERS.codex.clientId,
+          scope: "openid profile email offline_access",
+        }),
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        log?.warn?.("TOKEN", `Codex refresh failed: ${response.status} ${errorText}`);
+        return null;
+      }
+      const tokens = await response.json();
+      log?.info?.("TOKEN", "Codex token refreshed successfully");
+      return {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token || credentials.refreshToken,
+        expiresIn: tokens.expires_in,
+      };
+    } catch (error) {
+      log?.warn?.("TOKEN", `Codex refresh error: ${error.message}`);
+      return null;
+    }
   }
 
   buildUrl(model, stream, urlIndex = 0, credentials = null) {
@@ -192,6 +227,15 @@ export class CodexExecutor extends BaseExecutor {
     delete body.metadata; // Cursor sends this but Codex doesn't support it
     delete body.stream_options; // Cursor sends this but Codex doesn't support it
     delete body.safety_identifier; // Droid CLI sends this but Codex doesn't support it
+
+    // Sanitize empty call_ids — Codex backend rejects empty string call_id (#fix)
+    if (Array.isArray(body.input)) {
+      for (const item of body.input) {
+        if ((item.type === "function_call" || item.type === "function_call_output") && (!item.call_id || item.call_id === "")) {
+          item.call_id = `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        }
+      }
+    }
 
     return body;
   }

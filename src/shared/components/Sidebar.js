@@ -45,7 +45,6 @@ export default function Sidebar({ onClose }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [enableTranslator, setEnableTranslator] = useState(false);
   const { copied, copy } = useCopyToClipboard(2000);
-  const { copied, copy } = useCopyToClipboard(2000);
 
   const INSTALL_CMD = UPDATER_CONFIG.installCmd;
 
@@ -69,25 +68,6 @@ export default function Sidebar({ onClose }) {
       return pathname === "/dashboard" || pathname.startsWith("/dashboard/endpoint");
     }
     return pathname.startsWith(href);
-  };
-
-  const handleUpdate = async () => {
-    setIsUpdating(true);
-    setShowUpdateModal(false);
-    try {
-      const res = await fetch("/api/version/update", { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.message || "Update failed. Please run the install command manually.");
-        setIsUpdating(false);
-        return;
-      }
-      // Server will exit shortly; show disconnected overlay
-      setIsDisconnected(true);
-    } catch (e) {
-      // Expected once the server exits; treat as disconnected
-      setIsDisconnected(true);
-    }
   };
 
   const handleUpdate = async () => {

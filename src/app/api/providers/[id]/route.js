@@ -98,7 +98,11 @@ export async function PUT(request, { params }) {
       testStatus,
       lastError,
       lastErrorAt,
-      providerSpecificData
+      providerSpecificData,
+      hourlyQuota,
+      poolStatus,
+      cooldownUntil,
+      consecutiveFailures,
     } = body;
 
     const existing = await getProviderConnectionById(id);
@@ -126,6 +130,10 @@ export async function PUT(request, { params }) {
     if (testStatus !== undefined) updateData.testStatus = testStatus;
     if (lastError !== undefined) updateData.lastError = lastError;
     if (lastErrorAt !== undefined) updateData.lastErrorAt = lastErrorAt;
+    if (hourlyQuota !== undefined) updateData.hourlyQuota = Math.max(0, hourlyQuota);
+    if (poolStatus !== undefined) updateData.poolStatus = poolStatus;
+    if (cooldownUntil !== undefined) updateData.cooldownUntil = cooldownUntil;
+    if (consecutiveFailures !== undefined) updateData.consecutiveFailures = consecutiveFailures;
 
     if (
       shouldMergeProviderSpecificData(

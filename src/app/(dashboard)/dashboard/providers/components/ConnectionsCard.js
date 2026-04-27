@@ -93,6 +93,19 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
     return "default";
   };
 
+  const getPoolStatusVariant = () => {
+    const s = connection.poolStatus;
+    if (s === "ready") return "success";
+    if (s === "cooldown") return "warning";
+    if (s === "failed") return "error";
+    return "default";
+  };
+
+  const quota = connection.hourlyQuota > 0
+    ? { used: connection.windowRequestCount || 0, limit: connection.hourlyQuota }
+    : null;
+  const quotaPct = quota ? Math.min(100, Math.round((quota.used / quota.limit) * 100)) : 0;
+
   const displayName = isOAuth
     ? connection.name || connection.email || connection.displayName || "OAuth Account"
     : connection.name;
@@ -121,13 +134,35 @@ function ConnectionRow({ connection, proxyPools, isOAuth, isFirst, isLast, onMov
             <Badge variant={getStatusVariant()} size="sm" dot>
               {connection.isActive === false ? "disabled" : (effectiveStatus || "Unknown")}
             </Badge>
+            {connection.poolStatus && connection.poolStatus !== "ready" && (
+              <Badge variant={getPoolStatusVariant()} size="sm">{connection.poolStatus}</Badge>
+            )}
             {hasAnyProxy && <Badge variant={proxyBadgeVariant} size="sm">Proxy</Badge>}
             {isCooldown && connection.isActive !== false && <CooldownTimer until={modelLockUntil} />}
+            {connection.cooldownUntil && new Date(connection.cooldownUntil).getTime() > Date.now() && (
+              <CooldownTimer until={connection.cooldownUntil} />
+            )}
             {connection.lastError && connection.isActive !== false && (
               <span className="text-xs text-red-500 truncate max-w-[300px]" title={connection.lastError}>{connection.lastError}</span>
             )}
+            {(connection.consecutiveFailures || 0) > 0 && (
+              <span className={`text-xs font-mono ${(connection.consecutiveFailures || 0) >= 3 ? "text-red-500" : "text-text-muted"}`}>
+                fails: {connection.consecutiveFailures}
+              </span>
+            )}
             <span className="text-xs text-text-muted">#{connection.priority}</span>
           </div>
+          {quota && (
+            <div className="mt-1 flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-black/5 dark:bg-white/5 rounded-full max-w-[120px]">
+                <div
+                  className={`h-full rounded-full ${quotaPct >= 100 ? "bg-red-500" : quotaPct >= 80 ? "bg-orange-500" : "bg-green-500"}`}
+                  style={{ width: `${quotaPct}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-text-muted font-mono">{quota.used}/{quota.limit}</span>
+            </div>
+          )}
           {hasAnyProxy && (
             <div className="mt-1 flex items-center gap-2 flex-wrap">
               <span className="text-[11px] text-text-muted truncate max-w-[420px]" title={proxyDisplayText}>{proxyDisplayText}</span>
@@ -200,7 +235,7 @@ ConnectionRow.propTypes = {
 // ── AddApiKeyModal ─────────────────────────────────────────────
 function AddApiKeyModal({ isOpen, provider, providerName, proxyPools, onSave, onClose }) {
   const NONE = "__none__";
-  const [formData, setFormData] = useState({ name: "", apiKey: "", priority: 1, proxyPoolId: NONE });
+  const [formData, setFormData] = useState({ name: "", apiKey: "", priority: 1, proxyPoolId: NONE, hourlyQuota: 0 });
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -242,6 +277,7 @@ function AddApiKeyModal({ isOpen, provider, providerName, proxyPools, onSave, on
         priority: formData.priority,
         proxyPoolId: formData.proxyPoolId === NONE ? null : formData.proxyPoolId,
         testStatus: isValid ? "active" : "unknown",
+        hourlyQuota: Math.max(0, Number.parseInt(formData.hourlyQuota) || 0),
       });
     } finally { setSaving(false); }
   };
@@ -274,6 +310,10 @@ function AddApiKeyModal({ isOpen, provider, providerName, proxyPools, onSave, on
         <div>
           <label className="text-xs text-text-muted mb-1 block">Priority</label>
           <input type="number" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" value={formData.priority} onChange={(e) => setFormData({ ...formData, priority: Number.parseInt(e.target.value) || 1 })} />
+        </div>
+        <div>
+          <label className="text-xs text-text-muted mb-1 block">Hourly Quota (0 = unlimited)</label>
+          <input type="number" min="0" className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:border-primary" value={formData.hourlyQuota} onChange={(e) => setFormData({ ...formData, hourlyQuota: Number.parseInt(e.target.value) || 0 })} />
         </div>
         <Select label="Proxy Pool" value={formData.proxyPoolId} onChange={(e) => setFormData({ ...formData, proxyPoolId: e.target.value })}
           options={[{ value: NONE, label: "None" }, ...(proxyPools || []).map((p) => ({ value: p.id, label: p.name }))]} />
