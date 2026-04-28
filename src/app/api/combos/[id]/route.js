@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getComboById, updateCombo, deleteCombo, getComboByName, getSettings, updateSettings } from "@/lib/localDb";
+import { resetComboRotation } from "open-sse/services/combo.js";
 
 // Validate combo name: only a-z, A-Z, 0-9, -, _
 const VALID_NAME_REGEX = /^[a-zA-Z0-9_.\-]+$/;
@@ -45,6 +46,8 @@ export async function PUT(request, { params }) {
       }
     }
     
+    // Capture previous name to invalidate rotation state on rename
+    const prev = await getComboById(id);
     const combo = await updateCombo(id, body);
 
     if (body.name && body.name !== previousCombo.name) {
@@ -60,6 +63,10 @@ export async function PUT(request, { params }) {
       }
     }
 
+    // Invalidate rotation state (models/strategy/name may have changed)
+    if (prev?.name) resetComboRotation(prev.name);
+    if (combo.name && combo.name !== prev?.name) resetComboRotation(combo.name);
+
     return NextResponse.json(combo);
   } catch (error) {
     console.log("Error updating combo:", error);
@@ -71,18 +78,20 @@ export async function PUT(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
-    const combo = await getComboById(id);
+    const prev = await getComboById(id);
     const success = await deleteCombo(id);
     
     if (!success) {
       return NextResponse.json({ error: "Combo not found" }, { status: 404 });
     }
 
-    if (combo) {
+    if (prev?.name) resetComboRotation(prev.name);
+
+    if (prev) {
       const settings = await getSettings();
       const comboStrategies = { ...(settings.comboStrategies || {}) };
-      if (comboStrategies[combo.name]) {
-        delete comboStrategies[combo.name];
+      if (comboStrategies[prev.name]) {
+        delete comboStrategies[prev.name];
         await updateSettings({ comboStrategies });
       }
     }
