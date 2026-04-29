@@ -5,6 +5,7 @@ import { getProviderConnectionById, updateProviderConnection } from "@/lib/local
 import { getUsageForProvider } from "open-sse/services/usage.js";
 import { getExecutor } from "open-sse/executors/index.js";
 import { APIKEY_USAGE_PROVIDERS } from "@/shared/constants/providers";
+import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 
 // Detect auth-expired messages returned by usage providers instead of throwing
 const AUTH_EXPIRED_PATTERNS = ["expired", "authentication", "unauthorized", "401", "re-authorize"];
@@ -19,7 +20,7 @@ function isAuthExpiredMessage(usage) {
  * @param {boolean} force - Skip needsRefresh check and always attempt refresh
  * @returns Promise<{ connection, refreshed: boolean }>
  */
-async function refreshAndUpdateCredentials(connection, force = false) {
+async function refreshAndUpdateCredentials(connection, force = false, proxyOptions = null) {
   const executor = getExecutor(connection.provider);
 
   // Build credentials object from connection
@@ -40,8 +41,8 @@ async function refreshAndUpdateCredentials(connection, force = false) {
     return { connection, refreshed: false };
   }
 
-  // Use executor's refreshCredentials method
-  const refreshResult = await executor.refreshCredentials(credentials, console);
+  // Use executor's refreshCredentials method (with optional proxy)
+  const refreshResult = await executor.refreshCredentials(credentials, console, proxyOptions);
 
   if (!refreshResult) {
     // Refresh failed but we still have an accessToken — try with existing token
@@ -118,37 +119,40 @@ export async function GET(request, { params }) {
       return Response.json({ message: "Usage not available for API key connections" });
     }
 
-    let usage;
+    // Resolve connection proxy config; force strictProxy=false so quota/refresh fall back to direct on failure
+    const proxyConfig = await resolveConnectionProxyConfig(connection.providerSpecificData);
+    const proxyOptions = {
+      connectionProxyEnabled: proxyConfig.connectionProxyEnabled === true,
+      connectionProxyUrl: proxyConfig.connectionProxyUrl || "",
+      connectionNoProxy: proxyConfig.connectionNoProxy || "",
+      vercelRelayUrl: proxyConfig.vercelRelayUrl || "",
+      strictProxy: false,
+    };
 
-    if (connection.authType === "oauth") {
-      // Refresh credentials if needed using executor
+    // Refresh credentials if needed using executor
+    try {
+      const result = await refreshAndUpdateCredentials(connection, false, proxyOptions);
+      connection = result.connection;
+    } catch (refreshError) {
+      console.error("[Usage API] Credential refresh failed:", refreshError);
+      return Response.json({
+        error: `Credential refresh failed: ${refreshError.message}`
+      }, { status: 401 });
+    }
+
+    // Fetch usage from provider API
+    let usage = await getUsageForProvider(connection, proxyOptions);
+
+    // If provider returned an auth-expired message instead of throwing,
+    // force-refresh token and retry once
+    if (isAuthExpiredMessage(usage) && connection.refreshToken) {
       try {
-        const result = await refreshAndUpdateCredentials(connection);
-        connection = result.connection;
-      } catch (refreshError) {
-        console.error("[Usage API] Credential refresh failed:", refreshError);
-        return Response.json({
-          error: `Credential refresh failed: ${refreshError.message}`
-        }, { status: 401 });
+        const retryResult = await refreshAndUpdateCredentials(connection, true, proxyOptions);
+        connection = retryResult.connection;
+        usage = await getUsageForProvider(connection, proxyOptions);
+      } catch (retryError) {
+        console.warn(`[Usage] ${connection.provider}: force refresh failed: ${retryError.message}`);
       }
-
-      // Fetch usage from provider API
-      usage = await getUsageForProvider(connection);
-
-      // If provider returned an auth-expired message instead of throwing,
-      // force-refresh token and retry once
-      if (isAuthExpiredMessage(usage) && connection.refreshToken) {
-        try {
-          const retryResult = await refreshAndUpdateCredentials(connection, true);
-          connection = retryResult.connection;
-          usage = await getUsageForProvider(connection);
-        } catch (retryError) {
-          console.warn(`[Usage] ${connection.provider}: force refresh failed: ${retryError.message}`);
-        }
-      }
-    } else {
-      // API key provider quota fetch
-      usage = await getApiKeyProviderUsage(connection);
     }
 
     return Response.json(usage);
