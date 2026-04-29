@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { initRuntimeI18n, reloadTranslations } from "./runtime";
+import { initRuntimeI18n, reloadTranslations, onLocaleChange } from "./runtime";
 
 export function RuntimeI18nProvider({ children }) {
   const pathname = usePathname();
+  const [, setTick] = useState(0);
 
   useEffect(() => {
     initRuntimeI18n();
+
+    const unsubscribe = onLocaleChange(() => {
+      setTick((t) => t + 1);
+    });
+
+    return unsubscribe;
   }, []);
 
   // Re-process DOM when route changes

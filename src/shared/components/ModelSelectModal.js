@@ -103,10 +103,27 @@ export default function ModelSelectModal({
       ? NO_AUTH_PROVIDER_IDS.filter((id) => (AI_PROVIDERS[id]?.serviceKinds || ["llm"]).includes(kindFilter))
       : NO_AUTH_PROVIDER_IDS;
 
-    // Only show connected providers (including both standard and custom)
+    // Collect provider IDs that have models (from aliases or custom models)
+    const providersWithModels = new Set();
+    Object.entries(modelAliases).forEach(([, fullModel]) => {
+      const alias = fullModel.split("/")[0];
+      const providerId = Object.keys(allProviders).find(
+        (pid) => getProviderAlias(pid) === alias
+      );
+      if (providerId) providersWithModels.add(providerId);
+    });
+    customModels.forEach((m) => {
+      const providerId = Object.keys(allProviders).find(
+        (pid) => getProviderAlias(pid) === m.providerAlias
+      );
+      if (providerId) providersWithModels.add(providerId);
+    });
+
+    // Show connected providers + providers with models + no-auth providers
     const providerIdsToShow = new Set([
-      ...activeConnectionIds,  // Only connected providers
-      ...noAuthIds,            // No-auth providers (kind-filtered)
+      ...activeConnectionIds,
+      ...providersWithModels,
+      ...noAuthIds,
     ]);
 
     // Sort by PROVIDER_ORDER

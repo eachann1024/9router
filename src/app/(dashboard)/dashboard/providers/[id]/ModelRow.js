@@ -1,6 +1,7 @@
 import PropTypes from "prop-types";
+import { translate } from "@/i18n/runtime";
 
-export default function ModelRow({ model, fullModel, alias, copied, onCopy, testStatus, isCustom, isFree, onDeleteAlias, onTest, isTesting }) {
+export default function ModelRow({ model, fullModel, alias, copied, onCopy, testStatus, isCustom, isFree, isHideable, onDeleteAlias, onTest, isTesting }) {
   const borderColor = testStatus === "ok"
     ? "border-green-500/40"
     : testStatus === "error"
@@ -55,13 +56,13 @@ export default function ModelRow({ model, fullModel, alias, copied, onCopy, test
             {copied === `model-${model.id}` ? "Copied!" : "Copy"}
           </span>
         </div>
-        {isCustom && (
+        {(isCustom || isHideable) && onDeleteAlias && (
           <button
             onClick={onDeleteAlias}
             className="p-0.5 hover:bg-red-500/10 rounded text-text-muted hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity ml-auto"
-            title="Remove custom model"
+            title={isCustom ? translate("Remove custom model") : translate("Hide model")}
           >
-            <span className="material-symbols-outlined text-sm">close</span>
+            <span className="material-symbols-outlined text-sm">{isCustom ? "close" : "visibility_off"}</span>
           </button>
         )}
       </div>
@@ -79,6 +80,7 @@ ModelRow.propTypes = {
   onCopy: PropTypes.func.isRequired,
   testStatus: PropTypes.oneOf(["ok", "error"]),
   isCustom: PropTypes.bool,
+  isHideable: PropTypes.bool,
   isFree: PropTypes.bool,
   onDeleteAlias: PropTypes.func,
   onTest: PropTypes.func,

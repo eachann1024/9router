@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/shared/utils/cn";
 import { APP_CONFIG, UPDATER_CONFIG } from "@/shared/constants/config";
 import { MEDIA_PROVIDER_KINDS } from "@/shared/constants/providers";
+import { translate } from "@/i18n/runtime";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import Button from "./Button";
 import { ConfirmModal } from "./Modal";
@@ -192,14 +193,14 @@ export default function Sidebar({ onClose }) {
               >
                 {item.icon}
               </span>
-              <span className="text-sm font-medium">{item.label}</span>
+              <span className="text-sm font-medium">{translate(item.label)}</span>
             </Link>
           ))}
 
           {/* System section */}
           <div className="pt-4 mt-2">
             <p className="px-4 text-xs font-semibold text-text-muted/60 uppercase tracking-wider mb-2">
-              System
+              {translate("System")}
             </p>
 
             {/* Media Providers accordion */}
@@ -213,7 +214,7 @@ export default function Sidebar({ onClose }) {
               )}
             >
               <span className="material-symbols-outlined text-[18px]">perm_media</span>
-              <span className="text-sm font-medium flex-1 text-left">Media Providers</span>
+              <span className="text-sm font-medium flex-1 text-left">{translate("Media Providers")}</span>
               <span className="material-symbols-outlined text-[14px] transition-transform" style={{ transform: mediaOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
                 expand_more
               </span>
@@ -233,7 +234,7 @@ export default function Sidebar({ onClose }) {
                     )}
                   >
                     <span className="material-symbols-outlined text-[16px]">{kind.icon}</span>
-                    <span className="text-sm">{kind.label}</span>
+                    <span className="text-sm">{translate(kind.label)}</span>
                   </Link>
                 ))}
                 <Link
@@ -248,7 +249,7 @@ export default function Sidebar({ onClose }) {
                   )}
                 >
                   <span className="material-symbols-outlined text-[16px]">{COMBINED_WEB_ITEM.icon}</span>
-                  <span className="text-sm">{COMBINED_WEB_ITEM.label}</span>
+                  <span className="text-sm">{translate(COMBINED_WEB_ITEM.label)}</span>
                 </Link>
               </div>
             )}
@@ -273,7 +274,7 @@ export default function Sidebar({ onClose }) {
                 >
                   {item.icon}
                 </span>
-                <span className="text-sm font-medium">{item.label}</span>
+                <span className="text-sm font-medium">{translate(item.label)}</span>
               </Link>
             ))}
 
@@ -300,7 +301,7 @@ export default function Sidebar({ onClose }) {
                   >
                     {item.icon}
                   </span>
-                  <span className="text-sm font-medium">{item.label}</span>
+                  <span className="text-sm font-medium">{translate(item.label)}</span>
                 </Link>
               ) : null;
             })}
@@ -324,7 +325,7 @@ export default function Sidebar({ onClose }) {
               >
                 settings
               </span>
-              <span className="text-sm font-medium">Settings</span>
+              <span className="text-sm font-medium">{translate("Settings")}</span>
             </Link>
           </div>
         </nav>
@@ -339,7 +340,7 @@ export default function Sidebar({ onClose }) {
             onClick={() => setShowShutdownModal(true)}
             className="text-red-500 border-red-200 hover:bg-red-50 hover:border-red-300"
           >
-            Shutdown
+            {translate("Shutdown")}
           </Button>
         </div>
       </aside>

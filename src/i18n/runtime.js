@@ -127,7 +127,10 @@ export async function initRuntimeI18n() {
   
   currentLocale = getLocaleFromCookie();
   await loadTranslations(currentLocale);
-  
+
+  // Notify all registered callbacks
+  reloadCallbacks.forEach(callback => callback());
+
   // Process existing DOM
   processElement(document.body);
   

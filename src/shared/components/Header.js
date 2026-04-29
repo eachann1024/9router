@@ -208,7 +208,7 @@ export default function Header({ onMenuClick, showMenuButton = true }) {
                     href={crumb.href}
                     className="text-text-muted hover:text-primary transition-colors"
                   >
-                    {crumb.label}
+                    {translate(crumb.label)}
                   </Link>
                 ) : (
                   <div className="flex items-center gap-2">

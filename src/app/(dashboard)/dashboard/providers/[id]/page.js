@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -8,6 +8,7 @@ import { Card, Button, Badge, Input, Modal, CardSkeleton, OAuthModal, KiroOAuthW
 import { OAUTH_PROVIDERS, APIKEY_PROVIDERS, FREE_PROVIDERS, FREE_TIER_PROVIDERS, WEB_COOKIE_PROVIDERS, getProviderAlias, isOpenAICompatibleProvider, isAnthropicCompatibleProvider, AI_PROVIDERS, THINKING_CONFIG } from "@/shared/constants/providers";
 import { getModelsByProviderId } from "@/shared/constants/models";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
+import { translate } from "@/i18n/runtime";
 import { fetchSuggestedModels } from "@/shared/utils/providerModelsFetcher";
 import ModelRow from "./ModelRow";
 import PassthroughModelsSection from "./PassthroughModelsSection";
@@ -47,6 +48,7 @@ export default function ProviderDetailPage() {
   const [thinkingMode, setThinkingMode] = useState("auto");
   const [suggestedModels, setSuggestedModels] = useState([]);
   const [kiloFreeModels, setKiloFreeModels] = useState([]);
+  const [hiddenModels, setHiddenModels] = useState([]);
   const { copied, copy } = useCopyToClipboard();
 
   const providerInfo = providerNode
@@ -123,6 +125,15 @@ export default function ProviderDetailPage() {
       // Load per-provider thinking config
       const thinkingCfg = (settingsData.providerThinking || {})[providerId] || {};
       setThinkingMode(thinkingCfg.mode || "auto");
+      // Load hidden models for this provider — only update if settings request succeeded
+      // to avoid wiping hidden state on transient network errors
+      if (settingsRes.ok) {
+        const rawHidden = settingsData.hiddenModels;
+        const providerHidden = (rawHidden && typeof rawHidden === "object" && !Array.isArray(rawHidden)
+          ? rawHidden[providerId]
+          : []) || [];
+        setHiddenModels(Array.isArray(providerHidden) ? providerHidden : []);
+      }
       if (nodesRes.ok) {
         let node = (nodesData.nodes || []).find((entry) => entry.id === providerId) || null;
 
@@ -288,6 +299,45 @@ export default function ProviderDetailPage() {
     }
   };
 
+  const handleHideModel = async (modelId) => {
+    try {
+      const settingsRes = await fetch("/api/settings", { cache: "no-store" });
+      const settingsData = settingsRes.ok ? await settingsRes.json() : {};
+      const currentHidden = settingsData.hiddenModels || {};
+      const providerHidden = new Set(currentHidden[providerId] || []);
+      providerHidden.add(modelId);
+      const updated = { ...currentHidden, [providerId]: [...providerHidden] };
+
+      await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hiddenModels: updated }),
+      });
+      setHiddenModels([...providerHidden]);
+    } catch (error) {
+      console.log("Error hiding model:", error);
+    }
+  };
+
+  const handleUnhideModel = async (modelId) => {
+    try {
+      const settingsRes = await fetch("/api/settings", { cache: "no-store" });
+      const settingsData = settingsRes.ok ? await settingsRes.json() : {};
+      const currentHidden = settingsData.hiddenModels || {};
+      const providerHidden = (currentHidden[providerId] || []).filter((id) => id !== modelId);
+      const updated = { ...currentHidden, [providerId]: providerHidden };
+
+      await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hiddenModels: updated }),
+      });
+      setHiddenModels(providerHidden);
+    } catch (error) {
+      console.log("Error unhiding model:", error);
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!confirm("Delete this connection?")) return;
     try {
@@ -442,6 +492,51 @@ export default function ProviderDetailPage() {
     setSelectedConnectionIds((prev) => prev.filter((id) => connections.some((conn) => conn.id === id)));
   }, [connections]);
 
+  // Auto-test the first available (non-hidden) model when provider details load
+  // and connections are available. Only runs once per provider visit.
+  const hasAutoTestedRef = useRef(false);
+  useEffect(() => {
+    if (loading || hasAutoTestedRef.current) return;
+    if (isCompatible || providerInfo?.passthroughModels) return;
+
+    // Recompute displayModels (same logic as renderModelsSection)
+    const allHardcodedModels = [
+      ...models,
+      ...kiloFreeModels.filter((fm) => !models.some((m) => m.id === fm.id)),
+      ...(providerId === "openrouter"
+        ? suggestedModels
+            .map((model) => ({ ...model, isFree: true }))
+            .filter((fm) => !models.some((m) => m.id === fm.id))
+        : []),
+    ].filter((m) => !m.type || m.type === "llm");
+    const displayModels = allHardcodedModels.filter((m) => !hiddenModels.includes(m.id));
+
+    const firstModel = displayModels[0];
+    if (firstModel && (connections.length > 0 || isFreeNoAuth)) {
+      hasAutoTestedRef.current = true;
+      // Inline test to avoid stale closure with handleTestModel
+      const modelId = firstModel.id;
+      if (hiddenModels.includes(modelId)) return;
+      setTestingModelId(modelId);
+      fetch("/api/models/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: `${providerStorageAlias}/${modelId}` }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          setModelTestResults((prev) => ({ ...prev, [modelId]: data.ok ? "ok" : "error" }));
+          setModelsTestError(data.ok ? "" : (data.error || "Model not reachable"));
+        })
+        .catch(() => {
+          setModelTestResults((prev) => ({ ...prev, [modelId]: "error" }));
+          setModelsTestError("Network error");
+        })
+        .finally(() => setTestingModelId(null));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, providerId]);
+
   const selectedProxySummary = (() => {
     if (selectedConnections.length === 0) return "";
     const poolIds = new Set(selectedConnections.map((conn) => conn.providerSpecificData?.proxyPoolId || "__none__"));
@@ -595,6 +690,11 @@ export default function ProviderDetailPage() {
 
   const handleTestModel = async (modelId) => {
     if (testingModelId) return;
+    // Skip testing if model is hidden
+    if (hiddenModels.includes(modelId)) {
+      console.log(`Skipping test for hidden model: ${modelId}`);
+      return;
+    }
     setTestingModelId(modelId);
     try {
       const res = await fetch("/api/models/test", {
@@ -631,7 +731,8 @@ export default function ProviderDetailPage() {
     }
     // Combine hardcoded models with Kilo free models (deduplicated)
     // Exclude non-llm models (embedding, tts, etc.) — they have dedicated pages under media-providers
-    const displayModels = [
+    // Also exclude hidden models
+    const allHardcodedModels = [
       ...models,
       ...kiloFreeModels.filter((fm) => !models.some((m) => m.id === fm.id)),
       ...(
@@ -642,6 +743,8 @@ export default function ProviderDetailPage() {
           : []
       ),
     ].filter((m) => !m.type || m.type === "llm");
+    const displayModels = allHardcodedModels.filter((m) => !hiddenModels.includes(m.id));
+    const hiddenHardcodedModels = allHardcodedModels.filter((m) => hiddenModels.includes(m.id));
     const displayModelIds = new Set(displayModels.map((model) => model.id));
     // Custom models added by user (stored as aliases: modelId → providerAlias/modelId)
     const customModels = Object.entries(modelAliases)
@@ -677,12 +780,13 @@ export default function ProviderDetailPage() {
               copied={copied}
               onCopy={copy}
               onSetAlias={(alias) => handleSetAlias(model.id, alias, providerStorageAlias)}
-              onDeleteAlias={existingAlias ? () => handleDeleteAlias(existingAlias) : undefined}
+              onDeleteAlias={existingAlias ? () => handleDeleteAlias(existingAlias) : () => handleHideModel(model.id)}
               testStatus={modelTestResults[model.id]}
               onTest={connections.length > 0 || isFreeNoAuth ? () => handleTestModel(model.id) : undefined}
               isTesting={testingModelId === model.id}
               isFree={model.isFree}
               isCustom={providerInfo.passthroughModels && !!existingAlias}
+              isHideable={!existingAlias}
             />
           );
         })}
@@ -714,6 +818,30 @@ export default function ProviderDetailPage() {
           <span className="material-symbols-outlined text-sm">add</span>
           Add Model
         </button>
+
+        {/* Hidden models — allow unhide */}
+        {hiddenHardcodedModels.length > 0 && (
+          <div className="w-full mt-2">
+            <p className="text-xs text-text-muted mb-2">{translate("Hidden models")}:</p>
+            <div className="flex flex-wrap gap-2">
+              {hiddenHardcodedModels.map((model) => (
+                <div
+                  key={model.id}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-black/10 dark:border-white/10 text-xs text-text-muted bg-black/[0.02] dark:bg-white/[0.02]"
+                >
+                  <span className="font-mono">{model.id}</span>
+                  <button
+                    onClick={() => handleUnhideModel(model.id)}
+                    className="p-0.5 hover:bg-primary/10 rounded text-text-muted hover:text-primary transition-colors"
+                    title={translate("Unhide model")}
+                  >
+                    <span className="material-symbols-outlined text-[13px]">visibility</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Suggested models from provider API — show only models not yet added */}
         {providerId !== "openrouter" && suggestedModels.length > 0 && (() => {

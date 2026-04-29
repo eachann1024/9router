@@ -27,7 +27,8 @@ const OAUTH_TEST_CONFIG = {
     authPrefix: "Bearer ",
     extraHeaders: { "Content-Type": "application/json", "originator": "codex-cli", "User-Agent": "codex-cli/1.0.18 (macOS; arm64)" },
     // Minimal invalid body — triggers fast 400 without consuming quota
-    body: JSON.stringify({ model: "gpt-5.3-codex", input: [], stream: false, store: false }),
+    // Use first available model from provider config; fallback to hardcoded default
+    getBody: () => JSON.stringify({ model: getDefaultModel("cx") || "gpt-5.3-codex", input: [], stream: false, store: false }),
     // 400 (bad request) means auth succeeded; only 401/403 means token is bad
     acceptStatuses: [400],
     refreshable: true,
@@ -285,7 +286,8 @@ async function testOAuthConnection(connection, effectiveProxy = null) {
       ? { ...config.extraHeaders }
       : { [config.authHeader]: `${config.authPrefix}${accessToken}`, ...config.extraHeaders };
     const fetchOpts = { method: config.method, headers };
-    if (config.body) fetchOpts.body = config.body;
+    const body = config.getBody ? config.getBody() : config.body;
+    if (body) fetchOpts.body = body;
     const res = await fetchWithConnectionProxy(testUrl, fetchOpts, effectiveProxy);
 
     const accepted = res.ok || (config.acceptStatuses && config.acceptStatuses.includes(res.status));
@@ -299,7 +301,8 @@ async function testOAuthConnection(connection, effectiveProxy = null) {
           ? { ...config.extraHeaders }
           : { [config.authHeader]: `${config.authPrefix}${tokens.accessToken}`, ...config.extraHeaders };
         const retryOpts = { method: config.method, headers: retryHeaders };
-        if (config.body) retryOpts.body = config.body;
+        const retryBody = config.getBody ? config.getBody() : config.body;
+        if (retryBody) retryOpts.body = retryBody;
         const retryRes = await fetchWithConnectionProxy(retryUrl, retryOpts, effectiveProxy);
         const retryAccepted = retryRes.ok || (config.acceptStatuses && config.acceptStatuses.includes(retryRes.status));
         if (retryAccepted) return { valid: true, error: null, refreshed: true, newTokens: tokens };
